@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# OUVI
 
-## Getting Started
+Base estrutural do MVP da OUVI, uma rede social visual focada em interações por áudio.
 
-First, run the development server:
+## Visão geral
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Layout mobile-first, dark-first.
+- Feed com dados mockados e navegação para posts.
+- Autenticação social com Google via Supabase.
+- Onboarding para definição de username.
+- Páginas legais LGPD-ready.
+
+## Estrutura de pastas
+
+```
+src/
+  app/            # Rotas (App Router)
+  components/     # Componentes reutilizáveis
+  lib/            # Dados e utilitários
+  types/          # Tipagens compartilhadas
+supabase/
+  migrations/     # Migrations SQL
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Rotas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- `/` → Feed
+- `/p/[postId]` → Tela de Post
+- `/login` → Login com Google
+- `/auth/callback` → Callback OAuth
+- `/onboarding` → Definir username
+- `/terms` → Termos de Uso
+- `/privacy` → Política de Privacidade
+- `/data` → Solicitação de dados
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Como rodar
 
-## Learn More
+```bash
+npm install
+npm run dev
+```
 
-To learn more about Next.js, take a look at the following resources:
+Abra [http://localhost:3000](http://localhost:3000) para ver o app.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Configuração do Supabase
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Crie um projeto no Supabase e configure as variáveis em `.env.local`:
 
-## Deploy on Vercel
+```
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Google Auth
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. No Supabase, habilite o provedor Google em **Authentication → Providers**.
+2. Configure as credenciais OAuth (Client ID/Secret) do Google.
+3. Adicione a URL de callback do Supabase no Google Console.
+4. Em **URL Configuration**, defina o **Site URL** e os **Redirect URLs**. Para desenvolvimento local:
+   - Site URL: `http://localhost:3000`
+   - Redirect URL: `http://localhost:3000/auth/callback`
+
+### Migrations
+
+A migration inicial está em `supabase/migrations/001_create_profiles.sql`.
+
+Aplicar no Supabase:
+
+```sql
+-- execute o conteúdo do arquivo acima
+```
+
+### Testar login localmente
+
+1. Inicie o projeto com `npm run dev`.
+2. Acesse `http://localhost:3000/login`.
+3. Faça login com Google e finalize o onboarding em `/onboarding`.
