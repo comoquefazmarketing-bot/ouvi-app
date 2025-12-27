@@ -1,51 +1,43 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
-const MOCK_COMMENTS = [
-  {
-    id: "comment-1",
-    username: "@liarocha",
-    avatarUrl: "",
-    durationSeconds: 12,
-  },
-  {
-    id: "comment-2",
-    username: "@caiom",
-    avatarUrl: "",
-    durationSeconds: 9,
-  },
-  {
-    id: "comment-3",
-    username: "@nina",
-    avatarUrl: "",
-    durationSeconds: 14,
-  },
-];
+type Comment = {
+  id: string;
+  username: string;
+  avatarUrl: string;
+  audioUrl: string;
+  durationSeconds: number;
+};
 
 type CommentDrawerProps = {
+  postId: string;
   commentsCount: number;
 };
 
-export function CommentDrawer({ commentsCount }: CommentDrawerProps) {
+export function CommentDrawer({ postId, commentsCount }: CommentDrawerProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
   const [currentPlayingId, setCurrentPlayingId] = useState<string | null>(null);
   const [progressById, setProgressById] = useState<Record<string, number>>({});
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
-  const comments = useMemo(() => MOCK_COMMENTS, []);
-
+  // Busca comentários reais do Supabase ao abrir a thread
   useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, []);
+    async function fetchComments() {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*')
+        .eq('post_id', postId)
+        .order('created_at', { ascending: true });
+
+      if (data && !error) setComments(data);
+    }
+    fetchComments();
+  }, [postId]);
 
   const handlePlay = (commentId: string, durationSeconds: number) => {
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-    }
+    if (timerRef.current) clearInterval(timerRef.current);
 
     setCurrentPlayingId(commentId);
     setProgressById((prev) => ({ ...prev, [commentId]: 0 }));
@@ -60,10 +52,16 @@ export function CommentDrawer({ commentsCount }: CommentDrawerProps) {
       setProgressById((prev) => ({ ...prev, [commentId]: progress }));
 
       if (progress >= 1) {
-        if (timerRef.current) {
-          clearInterval(timerRef.current);
+        clearInterval(timerRef.current!);
+        
+        // Lógica de Autoplay: Toca o próximo comentário automaticamente
+        const currentIndex = comments.findIndex(c => c.id === commentId);
+        if (currentIndex < comments.length - 1) {
+          const next = comments[currentIndex + 1];
+          setTimeout(() => handlePlay(next.id, next.durationSeconds), 180); // Gap de 180ms do mapa
+        } else {
+          setCurrentPlayingId(null);
         }
-        setCurrentPlayingId(null);
       }
     }, 120);
   };
@@ -71,19 +69,13 @@ export function CommentDrawer({ commentsCount }: CommentDrawerProps) {
   const isFocusMode = currentPlayingId !== null;
 
   return (
-    <section className="mt-6 rounded-3xl border border-white/[0.08] bg-void p-5">
+    <section className="mt-6 rounded-3xl border border-white/[0.08] bg-black p-5">
       <header className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <span
-            className={`h-3 w-3 border border-white/20 transition-all duration-700 ${
-              currentPlayingId
-                ? "rounded-[40%] border-accent/60"
-                : "rounded-full"
-            }`}
-          />
-          <h3 className="text-sm font-semibold text-offwhite">Comentários</h3>
+          <span className={`h-3 w-3 border border-white/20 transition-all duration-700 ${currentPlayingId ? "rounded-[40%] border-[#D4C5B0]" : "rounded-full"}`} />
+          <h3 className="text-sm font-semibold text-[#eaeaea]">Ressonâncias</h3>
         </div>
-        <span className="text-xs text-white/45">{commentsCount} no total</span>
+        <span className="text-xs text-white/45">{commentsCount} áudios</span>
       </header>
 
       <div className="mt-5 space-y-4">
@@ -94,52 +86,27 @@ export function CommentDrawer({ commentsCount }: CommentDrawerProps) {
           return (
             <div
               key={comment.id}
-              className={`rounded-2xl border bg-white/[0.03] p-4 backdrop-blur-md transition-all duration-700 ${
-                isPlaying
-                  ? "border-[#D4C5B0]/40 shadow-[inset_0_0_20px_rgba(255,255,255,0.08)]"
-                  : "border-white/[0.08]"
-              } ${
-                isFocusMode && !isPlaying ? "opacity-50" : "opacity-100"
-              }`}
+              className={`rounded-2xl border bg-white/[0.03] p-4 backdrop-blur-md transition-all duration-700 ${isPlaying ? "border-[#D4C5B0]/40" : "border-white/[0.08]"} ${isFocusMode && !isPlaying ? "opacity-50" : "opacity-100"}`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs text-white/70 transition-all duration-700 ${
-                      isPlaying ? "animate-pulse scale-[1.02]" : ""
-                    }`}
-                  >
-                    {comment.avatarUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={comment.avatarUrl}
-                        alt={comment.username}
-                        className="h-full w-full rounded-full object-cover"
-                      />
-                    ) : (
-                      comment.username.slice(1, 2).toUpperCase()
-                    )}
+                  <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs text-white/70 ${isPlaying ? "animate-pulse" : ""}`}>
+                    {comment.username.slice(0, 2).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm text-offwhite">{comment.username}</p>
-                    <p className="text-xs text-white/45">
-                      {comment.durationSeconds}s
-                    </p>
+                    <p className="text-sm text-[#eaeaea]">{comment.username}</p>
+                    <p className="text-xs text-white/45">{comment.durationSeconds}s</p>
                   </div>
                 </div>
                 <button
-                  type="button"
                   onClick={() => handlePlay(comment.id, comment.durationSeconds)}
-                  className="rounded-full border border-white/10 px-4 py-1 text-xs text-offwhite transition hover:border-white/40"
+                  className="rounded-full border border-white/10 px-4 py-1 text-xs text-[#eaeaea] hover:border-white/40"
                 >
                   {isPlaying ? "Tocando" : "Ouvir"}
                 </button>
               </div>
-              <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/40">
-                <div
-                  className="h-full rounded-full bg-white transition-all duration-300"
-                  style={{ width: `${progress * 100}%` }}
-                />
+              <div className="mt-3 h-[2px] w-full overflow-hidden rounded-full bg-white/10">
+                <div className="h-full bg-[#D4C5B0] transition-all duration-300" style={{ width: `${progress * 100}%` }} />
               </div>
             </div>
           );

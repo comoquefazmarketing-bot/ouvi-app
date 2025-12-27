@@ -8,8 +8,9 @@ export default function Home() {
       <header className="space-y-4">
         <div className="flex items-center gap-4">
           <div className="relative flex items-center">
+            {/* Brilho sutil seguindo a estética premium do mapa */}
             <div className="absolute -left-2 -top-3 h-10 w-10 rounded-full bg-accent/20 blur-3xl" />
-            <span className="text-lg font-semibold tracking-[0.25em] text-offwhite">
+            <span className="text-lg font-semibold tracking-[0.25em] text-[#eaeaea]">
               OUVI
             </span>
           </div>
@@ -17,7 +18,7 @@ export default function Home() {
             <p className="text-xs uppercase tracking-[0.4em] text-white/45">
               Feed
             </p>
-            <h1 className="text-2xl font-semibold text-offwhite">
+            <h1 className="text-2xl font-semibold text-[#eaeaea]">
               O que estão ouvindo hoje?
             </h1>
           </div>
@@ -27,7 +28,11 @@ export default function Home() {
           áudio.
         </p>
       </header>
+
+      {/* Componente essencial para criar novos posts (Instagram-like) */}
       <PostCard variant="composer" />
+
+      {/* Lista de posts que futuramente virá do banco real via Supabase */}
       <FeedList posts={mockPosts} />
     </section>
   );
