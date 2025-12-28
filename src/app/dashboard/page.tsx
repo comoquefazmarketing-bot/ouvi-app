@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
-// Função para formatar a data do post
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -21,6 +20,7 @@ export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
   const [activePostId, setActivePostId] = useState<string | null>(null);
   const [openThread, setOpenThread] = useState(false);
+  const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   
   const [newPost, setNewPost] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -52,15 +52,37 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleCreatePost() {
-    // 🛡️ CAPTURA DIRETA DO USUÁRIO
-    const { data: { user: currentUser } } = await supabase.auth.getUser();
+  // FUNÇÃO CURTIR
+  const handleLike = (postId: string) => {
+    setLikedPosts(prev => ({ ...prev, [postId]: !prev[postId] }));
+    // Aqui você pode adicionar a integração com a tabela 'likes' do Supabase depois
+  };
 
-    // 💡 LOGICA DE ESTEPE: Se o ID vier zerado, usamos o seu ID real do banco
+  // FUNÇÃO COMPARTILHAR
+  const handleShare = async (postId: string) => {
+    const shareData = {
+      title: 'OUVI App',
+      text: 'Veja essa ressonância no OUVI!',
+      url: window.location.href,
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert("Link copiado para a área de transferência!");
+      }
+    } catch (err) {
+      console.log("Erro ao compartilhar");
+    }
+  };
+
+  async function handleCreatePost() {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
     const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
     const finalUserId = (!currentUser || currentUser.id === '00000000-0000-0000-0000-000000000000') 
-      ? REAL_USER_ID 
-      : currentUser.id;
+      ? REAL_USER_ID : currentUser.id;
 
     if (!newPost.trim() && !selectedImage) {
       alert("Escreva algo ou selecione uma imagem!");
@@ -71,41 +93,26 @@ export default function DashboardPage() {
 
     try {
       let imageUrl = null;
-
       if (selectedImage) {
         const fileExt = selectedImage.name.split('.').pop();
         const fileName = `${finalUserId}-${Math.random()}.${fileExt}`;
         const filePath = `post-photos/${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("post-images")
-          .upload(filePath, selectedImage);
-
+        const { error: uploadError } = await supabase.storage.from("post-images").upload(filePath, selectedImage);
         if (uploadError) throw uploadError;
-
-        const { data: publicData } = supabase.storage
-          .from("post-images")
-          .getPublicUrl(filePath);
-        
+        const { data: publicData } = supabase.storage.from("post-images").getPublicUrl(filePath);
         imageUrl = publicData.publicUrl;
       }
 
-      // 🚀 INSERÇÃO COM ID GARANTIDO
-      const { error: insertError } = await supabase
-        .from("posts")
-        .insert([
-          {
-            content: newPost,
-            image_url: imageUrl,
-            user_id: finalUserId, 
-            user_email: currentUser?.email || "comoquefazmarketing@gmail.com",
-          }
-        ]);
+      const { error: insertError } = await supabase.from("posts").insert([
+        {
+          content: newPost,
+          image_url: imageUrl,
+          user_id: finalUserId, 
+          user_email: currentUser?.email || "comoquefazmarketing@gmail.com",
+        }
+      ]);
 
-      if (insertError) {
-        console.error("Erro Supabase:", insertError);
-        throw insertError;
-      }
+      if (insertError) throw insertError;
 
       setStatus("success");
       setTimeout(() => {
@@ -114,9 +121,7 @@ export default function DashboardPage() {
         setStatus("idle");
         fetchPosts(); 
       }, 800);
-
     } catch (err: any) {
-      console.error("ERRO CRÍTICO AO POSTAR:", err.message);
       alert(`Erro ao postar: ${err.message}`);
       setStatus("idle");
     }
@@ -133,24 +138,20 @@ export default function DashboardPage() {
             <div style={styles.searchBar}><span>🔍 Pesquisar...</span></div>
           </div>
           <div style={styles.headerRight}>
-             <span style={styles.headerUserName}>{user?.user_metadata?.full_name?.split(' ')[0]}</span>
              <button onClick={() => supabase.auth.signOut().then(() => window.location.href="/")} style={styles.logoutBtn}>SAIR</button>
           </div>
         </div>
       </header>
 
       <main style={styles.feed}>
+        {/* CARD DE CRIAÇÃO */}
         <div style={styles.createCard}>
            <div style={styles.createHeader}>
-              {user?.user_metadata?.avatar_url ? (
-                <img src={user.user_metadata.avatar_url} style={styles.avatarSmall} alt="" />
-              ) : (
-                <div style={{...styles.avatarSmall, background: '#333'}} />
-              )}
-              <span style={styles.username}>{user?.user_metadata?.full_name || "Seu Perfil"}</span>
+              <div style={{...styles.avatarSmall, background: 'linear-gradient(45deg, #00f2fe, #000)'}} />
+              <span style={styles.username}>No que está pensando, Felipe?</span>
            </div>
            <textarea 
-            placeholder="No que você está pensando?" 
+            placeholder="Compartilhe sua vibração em texto..." 
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
             style={styles.createInput}
@@ -166,21 +167,20 @@ export default function DashboardPage() {
               style={{...styles.publishBtn, opacity: status !== "idle" ? 0.6 : 1}}
               disabled={status !== "idle"}
             >
-              {status === "uploading" ? "Sintonizando..." : status === "success" ? "Publicado ✓" : "Publicar"}
+              {status === "uploading" ? "Enviando..." : status === "success" ? "Publicado ✓" : "Publicar"}
             </button>
           </div>
         </div>
 
+        {/* FEED DE POSTS */}
         {posts.map((post) => {
           const username = post.user_email?.includes("@") ? post.user_email.split("@")[0] : `user_${post.id.slice(0, 5)}`;
+          const isLiked = likedPosts[post.id];
           
           return (
             <article key={post.id} style={styles.card}>
               <div style={styles.cardHeader}>
                 <div style={styles.avatarContainer}>
-                  {(post.user_id === user?.id && user?.user_metadata?.avatar_url) ? (
-                    <img src={user.user_metadata.avatar_url} style={styles.avatarImg} alt="" />
-                  ) : null}
                   <div style={styles.avatarPlaceholder} />
                 </div>
                 <div>
@@ -193,60 +193,72 @@ export default function DashboardPage() {
                 {post.image_url ? (
                   <img src={post.image_url} alt="" style={styles.postImg} />
                 ) : (
-                  <span style={styles.mediaHint}>Sintonizando frequência...</span>
+                  <div style={styles.textPostContainer}>{post.content}</div>
                 )}
               </div>
 
               <div style={styles.actions}>
-                <button style={styles.iconBtn}>🤍</button>
-                <button style={styles.listenBtn} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️ OUVIR RESSONÂNCIAS</button>
-                <button style={styles.iconBtn}>🚀</button>
+                <button 
+                  style={{...styles.iconBtn, color: isLiked ? '#ff3040' : '#fff', borderColor: isLiked ? '#ff3040' : '#1a1a1a'}} 
+                  onClick={() => handleLike(post.id)}
+                >
+                  {isLiked ? '❤️' : '🤍'}
+                </button>
+                <button style={styles.listenBtn} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️ OUVIR / COMENTAR</button>
+                <button style={styles.iconBtn} onClick={() => handleShare(post.id)}>🚀</button>
               </div>
 
-              <div style={styles.caption}>
-                <strong>@{username}</strong> {post.content || "Vibração sem palavras."}
-              </div>
+              {post.image_url && (
+                <div style={styles.caption}>
+                  <strong>@{username}</strong> {post.content}
+                </div>
+              )}
             </article>
           );
         })}
       </main>
 
-      {activePostId && <AudioThreadDrawer postId={activePostId} open={openThread} onClose={() => setOpenThread(false)} />}
+      {/* AQUI ESTÁ O DRAWER ONDE VOCÊ PODERÁ ESCREVER COMENTÁRIOS TAMBÉM */}
+      {activePostId && (
+        <AudioThreadDrawer 
+          postId={activePostId} 
+          open={openThread} 
+          onClose={() => setOpenThread(false)} 
+        />
+      )}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
-  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(10px)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
-  headerContent: { width: "100%", maxWidth: 420, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" },
+  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.9)", backdropFilter: "blur(12px)", borderBottom: "1px solid #151515", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" },
   headerLeft: { display: "flex", alignItems: "center", gap: 12, flex: 1 },
   headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
-  headerUserName: { fontSize: 10, opacity: 0.5, fontWeight: 'bold', textTransform: 'uppercase' },
-  logoImg: { height: 20, objectFit: "contain" },
-  searchBar: { background: "#111", padding: "6px 12px", borderRadius: 20, flex: 0.8, fontSize: 12, color: "#444", border: "1px solid #1a1a1a" },
-  logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 10, fontWeight: "bold", cursor: "pointer" },
-  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "20px 0" },
-  createCard: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", padding: 16 },
+  logoImg: { height: 22, objectFit: "contain" },
+  searchBar: { background: "#0a0a0a", padding: "8px 16px", borderRadius: 20, flex: 0.8, fontSize: 13, color: "#444", border: "1px solid #151515" },
+  logoutBtn: { background: "#111", border: "1px solid #222", color: "#ff3040", fontSize: 10, padding: "6px 12px", borderRadius: 20, fontWeight: "bold", cursor: "pointer" },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "16px 0", width: "100%" },
+  createCard: { width: "95%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", padding: 16 },
   createHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 },
-  avatarSmall: { width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' },
-  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 14, minHeight: 40 },
+  avatarSmall: { width: 32, height: 32, borderRadius: '50%' },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 60 },
   createActions: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid #151515" },
-  mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer" },
-  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "6px 16px", borderRadius: 8, fontSize: 11, fontWeight: "bold", cursor: "pointer" },
-  card: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", overflow: "hidden", marginBottom: 10 },
-  cardHeader: { display: "flex", gap: 12, padding: 16, alignItems: "center" },
-  avatarContainer: { width: 36, height: 36, borderRadius: "50%", overflow: 'hidden', background: '#111', border: '1px solid #222', position: 'relative' },
-  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', zIndex: 2 },
-  avatarPlaceholder: { width: '100%', height: '100%', background: 'linear-gradient(45deg,#222,#080808)' },
-  username: { fontWeight: 700, fontSize: 13 },
-  meta: { fontSize: 11, opacity: 0.5 },
-  media: { minHeight: 260, background: "#0a0a0a", display: "grid", placeItems: "center" },
+  mediaBtn: { background: "#111", border: "1px solid #222", color: "#fff", padding: "8px 16px", borderRadius: 12, fontSize: 12, cursor: "pointer" },
+  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "8px 20px", borderRadius: 12, fontSize: 12, fontWeight: "bold", cursor: "pointer" },
+  card: { width: "95%", maxWidth: 420, background: "#080808", borderRadius: 28, border: "1px solid #151515", overflow: "hidden", marginBottom: 8 },
+  cardHeader: { display: "flex", gap: 12, padding: "16px 16px 12px", alignItems: "center" },
+  avatarContainer: { width: 38, height: 38, borderRadius: "50%", overflow: 'hidden', background: '#111' },
+  avatarPlaceholder: { width: '100%', height: '100%', background: 'linear-gradient(45deg,#111,#222)' },
+  username: { fontWeight: 700, fontSize: 14 },
+  meta: { fontSize: 12, opacity: 0.4 },
+  media: { width: '100%', background: "#050505", display: "flex", flexDirection: "column" },
+  textPostContainer: { padding: "20px 16px", fontSize: 18, fontWeight: 300, color: "#eee", textAlign: "center", minHeight: 120, display: "flex", alignItems: "center", justifyContent: "center" },
   postImg: { width: "100%", height: "auto", display: "block" },
-  mediaHint: { fontSize: 11, opacity: 0.3 },
-  actions: { display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" },
-  iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 14, padding: 12, cursor: "pointer", color: "#fff" },
-  listenBtn: { flex: 1, background: "rgba(0,242,254,0.12)", border: "1px solid rgba(0,242,254,0.35)", color: "#00f2fe", borderRadius: 14, padding: "12px", fontWeight: 800, fontSize: 11, letterSpacing: 0.6, cursor: "pointer" },
-  caption: { padding: "0 16px 16px", fontSize: 14, lineHeight: 1.4, opacity: 0.9 },
-  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
+  actions: { display: "flex", alignItems: "center", gap: 10, padding: "12px 16px" },
+  iconBtn: { background: "#0a0a0a", border: "1px solid #1a1a1a", borderRadius: 16, padding: "10px 14px", cursor: "pointer", transition: '0.2s' },
+  listenBtn: { flex: 1, background: "rgba(0,242,254,0.08)", border: "1px solid rgba(0,242,254,0.2)", color: "#00f2fe", borderRadius: 16, padding: "12px", fontWeight: 700, fontSize: 11, cursor: "pointer" },
+  caption: { padding: "0 16px 16px", fontSize: 14, lineHeight: 1.5, color: "#ccc" },
+  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, letterSpacing: 1 },
 };
