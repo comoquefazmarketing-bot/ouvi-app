@@ -17,13 +17,11 @@ export default function DashboardPage() {
   const [loadingFeed, setLoadingFeed] = useState(true);
   const [activePostId, setActivePostId] = useState<string | null>(null);
   const [openThread, setOpenThread] = useState(false);
-  const [newPost, setNewPost] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
+  
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
 
-  // --- ANIMAÇÃO DE RESSONÂNCIA (PARTÍCULAS TIPO AREIA) ---
+  // --- ANIMAÇÃO DE CONVERGÊNCIA CYMATIC ---
   const startCymaticAnimation = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -34,59 +32,59 @@ export default function DashboardPage() {
     canvas.height = window.innerHeight;
 
     const particles: any[] = [];
-    const numParticles = 1200; // Efeito de grãos de areia
+    const numParticles = 1800; 
 
     for (let i = 0; i < numParticles; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = Math.max(canvas.width, canvas.height);
       particles.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        originX: Math.random() * canvas.width,
-        originY: Math.random() * canvas.height,
-        size: Math.random() * 1.5,
-        color: Math.random() > 0.5 ? "#00f2fe" : "#0077ff"
+        x: canvas.width / 2 + Math.cos(angle) * dist, // Começam fora da tela
+        y: canvas.height / 2 + Math.sin(angle) * dist,
+        targetX: Math.random() * canvas.width,
+        targetY: Math.random() * canvas.height,
+        size: Math.random() * 1.8,
+        color: i % 3 === 0 ? "#00f2fe" : "#0077ff",
+        vx: 0,
+        vy: 0
       });
     }
 
     const draw = (t: number) => {
-      ctx.fillStyle = "rgba(0, 0, 0, 0.15)"; // Rastro leve
+      ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       const centerX = canvas.width / 2;
       const centerY = canvas.height / 2;
-      const frequency = t * 0.001;
+      const time = t * 0.0006;
 
       particles.forEach((p, i) => {
-        // Equação de Chladni (Simulação de areia em placa vibratória)
-        const n = 4 + Math.sin(frequency) * 2; 
-        const m = 3 + Math.cos(frequency) * 2;
-        const L = 300; // Tamanho da placa virtual
+        // Matemática de Chladni para formar os padrões simétricos no centro
+        const xNorm = (p.targetX - centerX) / 280;
+        const yNorm = (p.targetY - centerY) / 280;
+        const n = 5 + Math.sin(time) * 2;
+        const m = 4 + Math.cos(time) * 2;
+        
+        const vib = Math.sin(n * xNorm) * Math.sin(m * yNorm) + Math.sin(m * xNorm) * Math.sin(n * yNorm);
+        
+        // Atração para o padrão de ressonância
+        const destX = p.targetX + vib * 40 * Math.cos(time);
+        const destY = p.targetY + vib * 40 * Math.sin(time);
 
-        const xNorm = (p.originX - centerX) / L;
-        const yNorm = (p.originY - centerY) / L;
+        p.x += (destX - p.x) * 0.03; // Suavidade no movimento
+        p.y += (destY - p.y) * 0.03;
 
-        // Vibração senoidal complexa
-        const vibration = Math.sin(n * Math.PI * xNorm) * Math.sin(m * Math.PI * yNorm) +
-                          Math.sin(m * Math.PI * xNorm) * Math.sin(n * Math.PI * yNorm);
-
-        const targetX = p.originX + vibration * 50 * Math.sin(frequency);
-        const targetY = p.originY + vibration * 50 * Math.cos(frequency);
-
-        p.x += (targetX - p.x) * 0.05;
-        p.y += (targetY - p.y) * 0.05;
-
-        // Desenho do grão
+        // Grão principal
         ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.8;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
 
-        // REFLEXO (ÁGUA)
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = 0.15;
+        // REFLEXO (Água)
+        ctx.globalAlpha = 0.12;
         ctx.beginPath();
-        ctx.arc(p.x, canvas.height - (p.y * 0.5), p.size, 0, Math.PI * 2);
+        ctx.arc(p.x, canvas.height - (p.y * 0.45), p.size, 0, Math.PI * 2);
         ctx.fill();
-        ctx.globalAlpha = 1.0;
       });
 
       animationFrameId.current = requestAnimationFrame(draw);
@@ -99,9 +97,7 @@ export default function DashboardPage() {
     if (!userProfile && !checkingProfile) {
       startCymaticAnimation();
     }
-    return () => {
-      if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current);
-    };
+    return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
   }, [userProfile, checkingProfile, startCymaticAnimation]);
 
   async function loadUserAndFeed() {
@@ -110,23 +106,8 @@ export default function DashboardPage() {
       const { data: profile } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
       if (profile) setUserProfile(profile);
     }
-    fetchPosts();
     setCheckingProfile(false);
   }
-
-  async function fetchPosts() {
-    const { data } = await supabase.from("posts").select("*, profiles(username, avatar_url)").order("created_at", { ascending: false });
-    if (data) setPosts(data);
-    setLoadingFeed(false);
-  }
-
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      setAvatarPreview(URL.createObjectURL(file));
-    }
-  };
 
   async function handleSaveProfile() {
     const nick = tempNick.trim().toLowerCase();
@@ -143,7 +124,7 @@ export default function DashboardPage() {
 
     const { error } = await supabase.from("profiles").insert([{ id: session?.user.id, username: nick, avatar_url: url }]);
     if (error) {
-      alert("Nick já existe!");
+      alert("Nick já existe ou erro no cadastro.");
       setIsSaving(false);
     } else {
       setUserProfile({ username: nick, avatar_url: url || "" });
@@ -157,22 +138,25 @@ export default function DashboardPage() {
       <div style={styles.onboarding}>
         <canvas ref={canvasRef} style={styles.canvas} />
         <div style={styles.onboardingContent}>
-          <h1 style={styles.onboardingTitle}>OUVI</h1>
-          <p style={styles.onboardingSub}>Sua voz é sua marca.</p>
+          <h1 style={styles.title}>OUVI</h1>
+          <p style={styles.subtitle}>Sua voz em ressonância.</p>
 
           <div onClick={() => avatarInputRef.current?.click()} style={{...styles.avatarBox, backgroundImage: avatarPreview ? `url(${avatarPreview})` : 'none'}}>
             {!avatarPreview && <span>📸</span>}
             <div style={styles.plus}>+</div>
           </div>
-          <input type="file" ref={avatarInputRef} hidden onChange={handleAvatarChange} />
+          <input type="file" ref={avatarInputRef} hidden onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) { setAvatarFile(f); setAvatarPreview(URL.createObjectURL(f)); }
+          }} />
 
           <div style={styles.inputArea}>
             <span style={{color: '#00f2fe'}}>@</span>
-            <input placeholder="nick_unico" style={styles.input} onChange={(e) => setTempNick(e.target.value)} />
+            <input placeholder="nick_exclusivo" style={styles.input} onChange={(e) => setTempNick(e.target.value)} />
           </div>
 
           <button onClick={handleSaveProfile} style={styles.btn} disabled={isSaving}>
-            {isSaving ? "CRIANDO..." : "ENTRAR NA REDE"}
+            {isSaving ? "CONFIGURANDO..." : "ENTRAR NA REDE"}
           </button>
         </div>
       </div>
@@ -187,30 +171,10 @@ export default function DashboardPage() {
           <button onClick={() => supabase.auth.signOut().then(() => location.reload())} style={styles.logout}>SAIR</button>
         </div>
       </header>
-
-      <main style={styles.feed}>
-        <div style={styles.createCard}>
-          <div style={styles.createHeader}>
-            <div style={{...styles.avatarSmall, backgroundImage: `url(${userProfile.avatar_url})`}} />
-            <span>O que você tem a dizer, {userProfile.username}?</span>
-          </div>
-          <textarea placeholder="No que está pensando?" style={styles.textarea} />
-          <button style={styles.pubBtn}>Publicar</button>
-        </div>
-
-        {posts.map(p => (
-          <article key={p.id} style={styles.card}>
-            <div style={styles.cardUser}>
-              <div style={{...styles.avatarSmall, backgroundImage: `url(${p.profiles?.avatar_url})`}} />
-              <strong>@{p.profiles?.username || 'user'}</strong>
-            </div>
-            <div style={{padding: '0 15px 15px'}}>{p.content}</div>
-            <button style={styles.listen} onClick={() => { setActivePostId(p.id); setOpenThread(true); }}>🎙️ OUVIR COMENTÁRIOS</button>
-          </article>
-        ))}
+      <main style={{textAlign: 'center', padding: 50}}>
+        <h2>Bem-vindo ao Feed, {userProfile.username}!</h2>
+        <p>A experiência visual foi concluída.</p>
       </main>
-
-      {activePostId && <AudioThreadDrawer postId={activePostId} open={openThread} onClose={() => setOpenThread(false)} />}
     </div>
   );
 }
@@ -218,26 +182,17 @@ export default function DashboardPage() {
 const styles: Record<string, React.CSSProperties> = {
   onboarding: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
   canvas: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 },
-  onboardingContent: { zIndex: 2, width: '100%', maxWidth: 320, textAlign: 'center', background: 'rgba(0,0,0,0.7)', padding: 30, borderRadius: 30, backdropFilter: 'blur(10px)', border: '1px solid #111' },
-  onboardingTitle: { fontSize: 32, letterSpacing: 8, fontWeight: 900, color: '#fff', marginBottom: 5 },
-  onboardingSub: { color: '#666', fontSize: 12, marginBottom: 30 },
-  avatarBox: { width: 90, height: 90, borderRadius: '50%', background: '#050505', border: '2px solid #00f2fe', margin: '0 auto 25px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative', backgroundSize: 'cover' },
-  plus: { position: 'absolute', bottom: 0, right: 0, background: '#00f2fe', color: '#000', width: 25, height: 25, borderRadius: '50%', fontWeight: 'bold' },
-  inputArea: { display: 'flex', alignItems: 'center', background: '#0a0a0a', border: '1px solid #222', padding: '12px 15px', borderRadius: 12, marginBottom: 15 },
-  input: { background: 'none', border: 'none', color: '#fff', marginLeft: 10, outline: 'none', width: '100%' },
-  btn: { width: '100%', padding: 15, borderRadius: 12, background: '#00f2fe', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer' },
+  onboardingContent: { zIndex: 2, width: '90%', maxWidth: 340, textAlign: 'center', background: 'rgba(0,0,0,0.75)', padding: 35, borderRadius: 32, backdropFilter: 'blur(12px)', border: '1px solid #111', boxShadow: '0 0 40px rgba(0,242,254,0.1)' },
+  title: { fontSize: 36, letterSpacing: 10, fontWeight: 900, color: '#fff', marginBottom: 5, textShadow: '0 0 20px rgba(0,242,254,0.5)' },
+  subtitle: { color: '#555', fontSize: 13, marginBottom: 35, letterSpacing: 1 },
+  avatarBox: { width: 100, height: 100, borderRadius: '50%', background: '#050505', border: '2px solid #00f2fe', margin: '0 auto 30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative', backgroundSize: 'cover' },
+  plus: { position: 'absolute', bottom: 5, right: 5, background: '#00f2fe', color: '#000', width: 26, height: 26, borderRadius: '50%', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid #000' },
+  inputArea: { display: 'flex', alignItems: 'center', background: '#0a0a0a', border: '1px solid #1a1a1a', padding: '15px', borderRadius: 15, marginBottom: 20 },
+  input: { background: 'none', border: 'none', color: '#fff', marginLeft: 10, outline: 'none', width: '100%', fontSize: 16 },
+  btn: { width: '100%', padding: 16, borderRadius: 15, background: '#00f2fe', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: 14, letterSpacing: 1 },
   page: { background: '#000', minHeight: '100vh', color: '#fff' },
-  header: { position: 'sticky', top: 0, background: 'rgba(0,0,0,0.8)', borderBottom: '1px solid #111', display: 'flex', justifyContent: 'center', zIndex: 10 },
+  header: { background: '#000', borderBottom: '1px solid #111', display: 'flex', justifyContent: 'center' },
   headerContent: { width: '100%', maxWidth: 420, display: 'flex', justifyContent: 'space-between', padding: 15 },
-  logout: { background: 'none', border: 'none', color: '#ff3040', fontSize: 10, fontWeight: 'bold' },
-  feed: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 15, padding: '20px 0' },
-  createCard: { width: '90%', maxWidth: 420, background: '#080808', padding: 15, borderRadius: 20, border: '1px solid #111' },
-  createHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 15, fontSize: 13, fontWeight: 'bold' },
-  avatarSmall: { width: 30, height: 30, borderRadius: '50%', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#222' },
-  textarea: { width: '100%', background: 'none', border: 'none', color: '#fff', resize: 'none', outline: 'none', height: 60 },
-  pubBtn: { background: '#fff', color: '#000', border: 'none', padding: '8px 20px', borderRadius: 10, fontWeight: 'bold', float: 'right' },
-  card: { width: '90%', maxWidth: 420, background: '#080808', borderRadius: 20, border: '1px solid #111' },
-  cardUser: { display: 'flex', alignItems: 'center', gap: 10, padding: 15 },
-  listen: { width: '90%', margin: '0 5% 15px', background: 'rgba(0,242,254,0.1)', border: '1px solid #00f2fe', color: '#00f2fe', padding: 12, borderRadius: 15, fontWeight: 'bold', fontSize: 11 },
-  loading: { height: '100vh', background: '#000', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: "center" }
+  logout: { background: 'none', border: 'none', color: '#ff3040', fontWeight: 'bold' },
+  loading: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }
 };
