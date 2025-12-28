@@ -1,185 +1,253 @@
 ﻿"use client";
 
 import { useEffect, useState, useRef } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../../lib/supabaseClient";
+import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
-interface AudioThreadProps {
-  postId: string;
-  open: boolean;
-  onClose: () => void;
-}
+// Função para formatar a data do post
+const formatTime = (date: string) => {
+  const diff = new Date().getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return new Date(date).toLocaleDateString();
+};
 
-export default function AudioThreadDrawer({ postId, open, onClose }: AudioThreadProps) {
-  const [audios, setAudios] = useState<any[]>([]);
+export default function DashboardPage() {
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingStatus, setRecordingStatus] = useState("Ouvindo...");
+  const [user, setUser] = useState<any>(null);
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [openThread, setOpenThread] = useState(false);
   
-  const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const audioChunks = useRef<Blob[]>([]);
+  const [newPost, setNewPost] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "success">("idle");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Carregar áudios existentes quando abrir
   useEffect(() => {
-    if (open && postId) {
-      fetchAudios();
+    let mounted = true;
+    async function loadInitialData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted && session?.user) {
+        setUser(session.user);
+      }
+      await fetchPosts(mounted);
     }
-  }, [open, postId]);
+    loadInitialData();
+    return () => { mounted = false };
+  }, []);
 
-  async function fetchAudios() {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("audios") // Certifique-se que o nome da tabela é 'audios'
-        .select(`
-          *,
-          profiles (username, avatar_url)
-        `)
-        .eq("post_id", postId)
-        .order("created_at", { ascending: true });
+  async function fetchPosts(mounted = true) {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      setAudios(data || []);
-    } catch (err) {
-      console.error("Erro ao carregar ressonâncias:", err);
-    } finally {
+    if (!error && mounted) {
+      setPosts(data || []);
       setLoading(false);
     }
   }
 
-  // 2. Lógica de Gravação de Áudio
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder.current = new MediaRecorder(stream);
-      audioChunks.current = [];
+  async function handleCreatePost() {
+    // 🛡️ CAPTURA DIRETA DO USUÁRIO
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
 
-      mediaRecorder.current.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunks.current.push(e.data);
-      };
-
-      mediaRecorder.current.onstop = async () => {
-        const audioBlob = new Blob(audioChunks.current, { type: "audio/webm" });
-        await uploadAudio(audioBlob);
-      };
-
-      mediaRecorder.current.start();
-      setIsRecording(true);
-      setRecordingStatus("Gravando frequência...");
-    } catch (err) {
-      alert("Permita o acesso ao microfone para gravar.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorder.current) {
-      mediaRecorder.current.stop();
-      setIsRecording(false);
-      setRecordingStatus("Enviando...");
-    }
-  };
-
-  // 3. Upload para o Storage e Banco
-  const uploadAudio = async (blob: Blob) => {
+    // 💡 LOGICA DE ESTEPE: Se o ID vier zerado, usamos o seu ID real do banco
     const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
-    const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.webm`;
-    const filePath = `audios/${fileName}`;
+    const finalUserId = (!currentUser || currentUser.id === '00000000-0000-0000-0000-000000000000') 
+      ? REAL_USER_ID 
+      : currentUser.id;
+
+    if (!newPost.trim() && !selectedImage) {
+      alert("Escreva algo ou selecione uma imagem!");
+      return;
+    }
+    
+    setStatus("uploading");
 
     try {
-      // Envia para o Storage
-      const { error: uploadError } = await supabase.storage
-        .from("post-images") // Usando o bucket que você já configurou
-        .upload(filePath, blob);
+      let imageUrl = null;
 
-      if (uploadError) throw uploadError;
+      if (selectedImage) {
+        const fileExt = selectedImage.name.split('.').pop();
+        const fileName = `${finalUserId}-${Math.random()}.${fileExt}`;
+        const filePath = `post-photos/${fileName}`;
 
-      const { data: publicUrlData } = supabase.storage
-        .from("post-images")
-        .getPublicUrl(filePath);
+        const { error: uploadError } = await supabase.storage
+          .from("post-images")
+          .upload(filePath, selectedImage);
 
-      // Insere na tabela de áudios
-      const { error: insertError } = await supabase.from("audios").insert([
-        {
-          post_id: postId,
-          user_id: REAL_USER_ID,
-          audio_url: publicUrlData.publicUrl,
-        },
-      ]);
+        if (uploadError) throw uploadError;
 
-      if (insertError) throw insertError;
-      
-      fetchAudios(); // Atualiza a lista
+        const { data: publicData } = supabase.storage
+          .from("post-images")
+          .getPublicUrl(filePath);
+        
+        imageUrl = publicData.publicUrl;
+      }
+
+      // 🚀 INSERÇÃO COM ID GARANTIDO
+      const { error: insertError } = await supabase
+        .from("posts")
+        .insert([
+          {
+            content: newPost,
+            image_url: imageUrl,
+            user_id: finalUserId, 
+            user_email: currentUser?.email || "comoquefazmarketing@gmail.com",
+          }
+        ]);
+
+      if (insertError) {
+        console.error("Erro Supabase:", insertError);
+        throw insertError;
+      }
+
+      setStatus("success");
+      setTimeout(() => {
+        setNewPost("");
+        setSelectedImage(null);
+        setStatus("idle");
+        fetchPosts(); 
+      }, 800);
+
     } catch (err: any) {
-      console.error("Erro no upload:", err.message);
-      alert("Falha ao enviar áudio.");
+      console.error("ERRO CRÍTICO AO POSTAR:", err.message);
+      alert(`Erro ao postar: ${err.message}`);
+      setStatus("idle");
     }
-  };
+  }
 
-  if (!open) return null;
+  if (loading) return <div style={styles.loading}>Sintonizando feed...</div>;
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.drawer}>
-        <div style={styles.header}>
-          <button onClick={onClose} style={styles.closeBtn}>FECHAR</button>
-          <div style={styles.pulseDot} />
-          <h3 style={styles.title}>RESSONÂNCIAS</h3>
+    <div style={styles.page}>
+      <header style={styles.header}>
+        <div style={styles.headerContent}>
+          <div style={styles.headerLeft}>
+            <img src="/logo-dashboard.svg" alt="OUVI" style={styles.logoImg} />
+            <div style={styles.searchBar}><span>🔍 Pesquisar...</span></div>
+          </div>
+          <div style={styles.headerRight}>
+             <span style={styles.headerUserName}>{user?.user_metadata?.full_name?.split(' ')[0]}</span>
+             <button onClick={() => supabase.auth.signOut().then(() => window.location.href="/")} style={styles.logoutBtn}>SAIR</button>
+          </div>
+        </div>
+      </header>
+
+      <main style={styles.feed}>
+        <div style={styles.createCard}>
+           <div style={styles.createHeader}>
+              {user?.user_metadata?.avatar_url ? (
+                <img src={user.user_metadata.avatar_url} style={styles.avatarSmall} alt="" />
+              ) : (
+                <div style={{...styles.avatarSmall, background: '#333'}} />
+              )}
+              <span style={styles.username}>{user?.user_metadata?.full_name || "Seu Perfil"}</span>
+           </div>
+           <textarea 
+            placeholder="No que você está pensando?" 
+            value={newPost}
+            onChange={(e) => setNewPost(e.target.value)}
+            style={styles.createInput}
+            disabled={status !== "idle"}
+          />
+          {selectedImage && <div style={{fontSize: 10, color: '#00f2fe', marginBottom: 5, fontWeight: 'bold'}}>✓ Imagem preparada</div>}
+          <div style={styles.createActions}>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn} disabled={status !== "idle"}>🖼️ Foto</button>
+            <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
+            
+            <button 
+              onClick={handleCreatePost}
+              style={{...styles.publishBtn, opacity: status !== "idle" ? 0.6 : 1}}
+              disabled={status !== "idle"}
+            >
+              {status === "uploading" ? "Sintonizando..." : status === "success" ? "Publicado ✓" : "Publicar"}
+            </button>
+          </div>
         </div>
 
-        <div style={styles.audioList}>
-          {loading ? (
-            <div style={styles.statusMsg}>Sincronizando áudios...</div>
-          ) : audios.length > 0 ? (
-            audios.map((audio) => (
-              <div key={audio.id} style={styles.audioCard}>
-                <div style={styles.audioHeader}>
-                  <span style={styles.userTag}>@{audio.profiles?.username || "membro"}</span>
-                  <span style={styles.timeTag}>{new Date(audio.created_at).toLocaleTimeString()}</span>
+        {posts.map((post) => {
+          const username = post.user_email?.includes("@") ? post.user_email.split("@")[0] : `user_${post.id.slice(0, 5)}`;
+          
+          return (
+            <article key={post.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div style={styles.avatarContainer}>
+                  {(post.user_id === user?.id && user?.user_metadata?.avatar_url) ? (
+                    <img src={user.user_metadata.avatar_url} style={styles.avatarImg} alt="" />
+                  ) : null}
+                  <div style={styles.avatarPlaceholder} />
                 </div>
-                <audio controls src={audio.audio_url} style={styles.player} />
+                <div>
+                  <div style={styles.username}>@{username}</div>
+                  <div style={styles.meta}>{formatTime(post.created_at)}</div>
+                </div>
               </div>
-            ))
-          ) : (
-            <div style={styles.statusMsg}>Silêncio absoluto. Seja o primeiro a ressoar.</div>
-          )}
-        </div>
 
-        <div style={styles.recorderArea}>
-          <button 
-            onMouseDown={startRecording} 
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            style={{
-              ...styles.micBtn,
-              background: isRecording ? "#ff3040" : "rgba(0,242,254,0.1)",
-              borderColor: isRecording ? "#ff3040" : "#00f2fe",
-              transform: isRecording ? "scale(1.1)" : "scale(1)"
-            }}
-          >
-            {isRecording ? "🔴 SOLTE" : "🎙️ SEGURE"}
-          </button>
-          <p style={styles.micHint}>{isRecording ? "Gravando..." : "Segure para falar"}</p>
-        </div>
-      </div>
+              <div style={styles.media}>
+                {post.image_url ? (
+                  <img src={post.image_url} alt="" style={styles.postImg} />
+                ) : (
+                  <span style={styles.mediaHint}>Sintonizando frequência...</span>
+                )}
+              </div>
+
+              <div style={styles.actions}>
+                <button style={styles.iconBtn}>🤍</button>
+                <button style={styles.listenBtn} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️ OUVIR RESSONÂNCIAS</button>
+                <button style={styles.iconBtn}>🚀</button>
+              </div>
+
+              <div style={styles.caption}>
+                <strong>@{username}</strong> {post.content || "Vibração sem palavras."}
+              </div>
+            </article>
+          );
+        })}
+      </main>
+
+      {activePostId && <AudioThreadDrawer postId={activePostId} open={openThread} onClose={() => setOpenThread(false)} />}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "flex-end" },
-  drawer: { width: "100%", maxWidth: 450, background: "#050505", borderTopLeftRadius: 40, borderTopRightRadius: 40, border: '1px solid #111', padding: 25, height: "85vh", display: "flex", flexDirection: "column" },
-  header: { textAlign: "center", marginBottom: 30, position: 'relative' },
-  closeBtn: { background: "none", border: "none", color: "#444", fontWeight: "bold", cursor: "pointer", fontSize: 10, letterSpacing: 2, marginBottom: 15 },
-  title: { color: "#00f2fe", margin: 0, fontSize: 18, letterSpacing: 5, fontWeight: 900 },
-  pulseDot: { width: 6, height: 6, background: '#00f2fe', borderRadius: '50%', margin: '0 auto 10px', boxShadow: '0 0 10px #00f2fe' },
-  audioList: { flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20, paddingBottom: 20 },
-  audioCard: { background: "#0c0c0c", padding: 20, borderRadius: 25, border: "1px solid #151515" },
-  audioHeader: { display: "flex", justifyContent: "space-between", marginBottom: 12, fontSize: 11, fontWeight: "bold" },
-  userTag: { color: "#fff", opacity: 0.9 },
-  timeTag: { color: "#444" },
-  player: { width: "100%", height: 40, filter: "invert(1) hue-rotate(180deg)" },
-  statusMsg: { textAlign: "center", color: "#333", marginTop: 50, fontSize: 13, letterSpacing: 1 },
-  recorderArea: { padding: "20px 0", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, borderTop: "1px solid #111" },
-  micBtn: { width: 80, height: 80, borderRadius: "50%", border: "2px solid", color: "#00f2fe", fontSize: 12, fontWeight: "bold", cursor: "pointer", transition: "all 0.2s" },
-  micHint: { fontSize: 10, color: "#444", letterSpacing: 2, textTransform: "uppercase" }
+  page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
+  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(10px)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 420, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" },
+  headerLeft: { display: "flex", alignItems: "center", gap: 12, flex: 1 },
+  headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
+  headerUserName: { fontSize: 10, opacity: 0.5, fontWeight: 'bold', textTransform: 'uppercase' },
+  logoImg: { height: 20, objectFit: "contain" },
+  searchBar: { background: "#111", padding: "6px 12px", borderRadius: 20, flex: 0.8, fontSize: 12, color: "#444", border: "1px solid #1a1a1a" },
+  logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 10, fontWeight: "bold", cursor: "pointer" },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "20px 0" },
+  createCard: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", padding: 16 },
+  createHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 },
+  avatarSmall: { width: 28, height: 28, borderRadius: '50%', objectFit: 'cover' },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 14, minHeight: 40 },
+  createActions: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid #151515" },
+  mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer" },
+  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "6px 16px", borderRadius: 8, fontSize: 11, fontWeight: "bold", cursor: "pointer" },
+  card: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", overflow: "hidden", marginBottom: 10 },
+  cardHeader: { display: "flex", gap: 12, padding: 16, alignItems: "center" },
+  avatarContainer: { width: 36, height: 36, borderRadius: "50%", overflow: 'hidden', background: '#111', border: '1px solid #222', position: 'relative' },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', zIndex: 2 },
+  avatarPlaceholder: { width: '100%', height: '100%', background: 'linear-gradient(45deg,#222,#080808)' },
+  username: { fontWeight: 700, fontSize: 13 },
+  meta: { fontSize: 11, opacity: 0.5 },
+  media: { minHeight: 260, background: "#0a0a0a", display: "grid", placeItems: "center" },
+  postImg: { width: "100%", height: "auto", display: "block" },
+  mediaHint: { fontSize: 11, opacity: 0.3 },
+  actions: { display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" },
+  iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 14, padding: 12, cursor: "pointer", color: "#fff" },
+  listenBtn: { flex: 1, background: "rgba(0,242,254,0.12)", border: "1px solid rgba(0,242,254,0.35)", color: "#00f2fe", borderRadius: 14, padding: "12px", fontWeight: 800, fontSize: 11, letterSpacing: 0.6, cursor: "pointer" },
+  caption: { padding: "0 16px 16px", fontSize: 14, lineHeight: 1.4, opacity: 0.9 },
+  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
 };
+
