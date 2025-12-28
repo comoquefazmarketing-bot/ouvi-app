@@ -1,10 +1,5 @@
 ﻿import "./globals.css";
 
-export const metadata = {
-  title: "OUVI",
-  description: "Rede Social de Ressonâncias",
-};
-
 export default function RootLayout({
   children,
 }: {
@@ -12,7 +7,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-br">
-      <body className="antialiased">{children}</body>
+      <body className="bg-black text-white">{children}</body>
     </html>
   );
 }
