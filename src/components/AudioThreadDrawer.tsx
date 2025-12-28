@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 interface Props {
@@ -9,203 +9,147 @@ interface Props {
   onClose: () => void;
 }
 
-interface AudioItem {
-  id: string;
-  user: string;
-  url: string;
-  duration: string;
-}
-
 export default function AudioThreadDrawer({ postId, open, onClose }: Props) {
-  const [recording, setRecording] = useState(false);
-  const [audios, setAudios] = useState<AudioItem[]>([]);
-  const [loading, setLoading] = useState(false);
-
+  const [comments, setComments] = useState<any[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const activeAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!open) return;
-
-    async function loadAudios() {
-      const { data, error } = await supabase
-        .from("audio_comments")
-        .select("*")
-        .eq("post_id", postId)
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error("Erro ao carregar áudios:", error);
-        return;
-      }
-
-      setAudios(
-        (data ?? []).map((a: any) => ({
-          id: a.id,
-          user: a.user_id?.slice(0, 6) ?? "user",
-          url: a.audio_url,
-          duration: "—",
-        }))
-      );
-    }
-
-    loadAudios();
+    if (open) fetchComments();
   }, [open, postId]);
+
+  async function fetchComments() {
+    const { data } = await supabase
+      .from("comments")
+      .select("*")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+    setComments(data || []);
+  }
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      mediaRecorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+        await uploadAudio(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) { alert("Ative o microfone!"); }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const uploadAudio = async (blob: Blob) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const fileName = `${Date.now()}.webm`;
+      await supabase.storage.from("post-images").upload(`audios/${fileName}`, blob);
+      const { data: pubUrl } = supabase.storage.from("post-images").getPublicUrl(`audios/${fileName}`);
+
+      await supabase.from("comments").insert([{
+        post_id: postId,
+        user_id: user?.id || "0c8314cc-2731-4bf2-99a1-d8cd2725d77f",
+        audio_url: pubUrl.publicUrl,
+        user_email: user?.email || "felipe@ouvi.app"
+      }]);
+      fetchComments();
+    } catch (err) { console.error(err); }
+  };
 
   if (!open) return null;
 
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-
-      recorder.ondataavailable = (e) => audioChunksRef.current.push(e.data);
-
-      recorder.onstop = async () => {
-        setLoading(true);
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        const filePath = `${postId}/${Date.now()}.webm`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("audio-comments")
-          .upload(filePath, blob, { contentType: "audio/webm" });
-
-        if (uploadError) {
-          console.error("Erro no upload:", uploadError);
-          setLoading(false);
-          return;
-        }
-
-        const { data: publicData } = supabase.storage.from("audio-comments").getPublicUrl(filePath);
-        const { data: { user } } = await supabase.auth.getUser();
-
-        await supabase.from("audio_comments").insert({
-          post_id: postId,
-          user_id: user?.id,
-          audio_url: publicData.publicUrl,
-        });
-
-        setAudios((prev) => [
-          { id: crypto.randomUUID(), user: "voce", url: publicData.publicUrl, duration: "—" },
-          ...prev,
-        ]);
-
-        setLoading(false);
-        stream.getTracks().forEach((t) => t.stop());
-      };
-
-      recorder.start();
-      mediaRecorderRef.current = recorder;
-      setRecording(true);
-    } catch (err) {
-      console.error("Microfone negado:", err);
-    }
-  }
-
-  function stopRecording() {
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
-  }
-
-  function playAudio(el: HTMLAudioElement) {
-    if (activeAudioRef.current && activeAudioRef.current !== el) {
-      activeAudioRef.current.pause();
-    }
-    activeAudioRef.current = el;
-    el.play();
-  }
-
   return (
-    <div style={styles.overlay}>
-      <style>{pulseCss}</style>
-      <div style={styles.drawer}>
-        <header style={styles.header}>
-          <span style={styles.title}>Ressonâncias</span>
-          <button onClick={onClose} style={styles.close}>✕</button>
-        </header>
+    <>
+      {/* OVERLAY: Ocupa tudo e fecha ao clicar */}
+      <div 
+        style={styles.overlay} 
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }} 
+      />
 
-        <main style={styles.list}>
-          {audios.length === 0 && !loading && (
-            <span style={{ opacity: 0.4, fontSize: 13, textAlign: 'center', marginTop: 20 }}>
-              Silêncio absoluto. Seja o primeiro a soar.
-            </span>
-          )}
-
-          {audios.map((audio) => (
-            <div key={audio.id} style={styles.audioRow}>
-              <div style={styles.avatar} />
-              <div style={{ flex: 1 }}>
-                <b style={styles.user}>@{audio.user}</b>
-                <audio
-                  src={audio.url}
-                  controls
-                  onPlay={(e) => playAudio(e.currentTarget)}
-                  style={styles.audio}
-                />
-              </div>
-            </div>
-          ))}
-        </main>
-
-        <footer style={styles.footer}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 13, fontWeight: 'bold', color: recording ? "#ff3040" : "#fff" }}>
-              {recording ? "OUVINDO VOCÊ..." : loading ? "SINTONIZANDO..." : "RESSONAR"}
-            </span>
-            <span style={{ fontSize: 10, opacity: 0.5 }}>
-              {recording ? "Solte para enviar" : "Segure o mic"}
-            </span>
+      {/* GAVETA: Travada na largura do feed e centralizada */}
+      <div style={styles.drawerContainer}>
+        <div style={styles.header}>
+          <div style={styles.handle} />
+          <div style={styles.headerTop}>
+            <h2 style={styles.title}>Comentários</h2>
+            <button onClick={onClose} style={styles.closeBtn}>✕</button>
           </div>
+        </div>
 
-          <button
-            onMouseDown={startRecording}
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            style={{
-              ...styles.micBtn,
-              background: recording ? "#ff3040" : "#fff",
-              color: recording ? "#fff" : "#000",
-              animation: recording ? "pulse 1.2s infinite" : "none",
-              transform: loading ? "scale(0.8)" : "scale(1)",
-              opacity: loading ? 0.5 : 1
-            }}
-            disabled={loading}
-          >
-            {loading ? "..." : "🎙️"}
-          </button>
-        </footer>
+        <div style={styles.content}>
+          {comments.length === 0 ? (
+            <p style={styles.emptyText}>Ninguém falou nada ainda...</p>
+          ) : (
+            comments.map((c) => (
+              <div key={c.id} style={styles.commentRow}>
+                <div style={styles.avatarMini} />
+                <div style={styles.audioCard}>
+                   <audio src={c.audio_url} controls style={styles.audioPlayer} />
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div style={styles.footer}>
+          <div style={styles.recordSection}>
+            <span style={{...styles.label, color: isRecording ? "#ff3040" : "#666"}}>
+              {isRecording ? "GRAVANDO... SOLTE" : "Segure para falar"}
+            </span>
+            <button 
+              onMouseDown={startRecording} onMouseUp={stopRecording}
+              onTouchStart={startRecording} onTouchEnd={stopRecording}
+              style={{...styles.micBtn, background: isRecording ? "#ff3040" : "#fff"}}
+            >
+              🎙️
+            </button>
+          </div>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 
-const pulseCss = `
-@keyframes pulse {
-  0% { box-shadow: 0 0 0 0 rgba(255,48,64,0.7); transform: scale(1); }
-  70% { box-shadow: 0 0 0 20px rgba(255,48,64,0); transform: scale(1.05); }
-  100% { box-shadow: 0 0 0 0 rgba(255,48,64,0); transform: scale(1); }
-}
-audio::-webkit-media-controls-panel { background-color: #111; }
-audio::-webkit-media-controls-current-time-display { color: #fff; }
-audio::-webkit-media-controls-time-remaining-display { color: #fff; }
-`;
-
 const styles: Record<string, React.CSSProperties> = {
-  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)", zIndex: 999, display: "flex", alignItems: "flex-end" },
-  drawer: { width: "100%", maxHeight: "80vh", background: "#050505", borderRadius: "32px 32px 0 0", display: "flex", flexDirection: "column", borderTop: "1px solid rgba(255,255,255,0.1)" },
-  header: { padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: 'center' },
-  title: { fontWeight: 900, fontSize: 18, letterSpacing: -0.5, color: '#fff' },
-  close: { background: "rgba(255,255,255,0.1)", border: "none", color: "#fff", width: 32, height: 32, borderRadius: '50%', cursor: "pointer" },
-  list: { flex: 1, padding: 20, overflowY: "auto", display: "flex", flexDirection: "column", gap: 20 },
-  audioRow: { display: "flex", gap: 12, alignItems: 'flex-start' },
-  avatar: { width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(45deg,#00f2fe,#4facfe)", flexShrink: 0 },
-  user: { fontSize: 13, color: "#00f2fe", marginLeft: 4 },
-  audio: { width: "100%", marginTop: 8, height: 36, filter: "invert(100%) hue-rotate(180deg) brightness(1.5)" },
-  footer: { padding: "24px 30px", borderTop: "1px solid rgba(255,255,255,0.08)", display: "flex", justifyContent: "space-between", alignItems: "center", background: '#080808' },
-  micBtn: { width: 64, height: 64, borderRadius: "50%", border: "none", fontSize: 24, cursor: "pointer", transition: "all 0.3s ease", display: 'grid', placeItems: 'center' },
+  overlay: { 
+    position: "fixed", top: 0, left: 0, right: 0, bottom: 0, 
+    background: "rgba(0,0,0,0.8)", backdropFilter: "blur(4px)", zIndex: 9998 
+  },
+  drawerContainer: { 
+    position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", 
+    width: "100%", maxWidth: 420, height: "70vh", background: "#0a0a0a", 
+    borderTopLeftRadius: 30, borderTopRightRadius: 30, border: "1px solid #1a1a1a", 
+    zIndex: 9999, display: "flex", flexDirection: "column", overflow: "hidden" 
+  },
+  header: { padding: "15px 20px", borderBottom: "1px solid #151515" },
+  handle: { width: 40, height: 4, background: "#333", borderRadius: 2, margin: "0 auto 10px" },
+  headerTop: { display: "flex", justifyContent: "space-between", alignItems: "center" },
+  title: { fontSize: 14, fontWeight: "bold", color: "#fff", textTransform: "uppercase" },
+  closeBtn: { background: "none", border: "none", color: "#555", fontSize: 20, cursor: "pointer" },
+  content: { flex: 1, overflowY: "auto", padding: "20px" },
+  commentRow: { display: "flex", gap: 10, marginBottom: 15 },
+  avatarMini: { width: 28, height: 28, borderRadius: "50%", background: "#222" },
+  audioCard: { flex: 1, background: "#111", borderRadius: 15, overflow: "hidden" },
+  audioPlayer: { width: "100%", height: 30 },
+  emptyText: { textAlign: "center", opacity: 0.3, marginTop: 30, fontSize: 13 },
+  footer: { padding: "20px", background: "#050505", borderTop: "1px solid #151515" },
+  recordSection: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8 },
+  label: { fontSize: 10, fontWeight: "bold" },
+  micBtn: { width: 65, height: 65, borderRadius: "50%", border: "none", fontSize: 24, cursor: "pointer", transition: "0.2s" },
 };
