@@ -30,22 +30,23 @@ export default function DashboardPage() {
     let mounted = true;
     async function loadInitialData() {
       const { data: { session } } = await supabase.auth.getSession();
-      if (mounted && session?.user) {
-        setUser(session.user);
-      }
+      if (mounted && session?.user) setUser(session.user);
       await fetchPosts(mounted);
     }
     loadInitialData();
     return () => { mounted = false };
   }, []);
 
-  // 🚀 BUSCA COMPLETA: POSTS + USUÁRIOS + ÁUDIOS
+  // 🚀 RECUPERAÇÃO DE LOGS (POSTS + DESCRIÇÕES + PERFIS)
   async function fetchPosts(mounted = true) {
-    // Buscamos os posts e fazemos o join com profiles
     const { data, error } = await supabase
       .from("posts")
       .select(`
-        *,
+        id,
+        content,
+        image_url,
+        created_at,
+        user_email,
         profiles (
           username,
           avatar_url
@@ -57,7 +58,7 @@ export default function DashboardPage() {
       setPosts(data || []);
       setLoading(false);
     } else {
-      console.error("Erro ao carregar logs:", error);
+      console.error("ERRO AO RECUPERAR LOGS:", error);
       setLoading(false);
     }
   }
@@ -97,50 +98,61 @@ export default function DashboardPage() {
     }
   }
 
-  if (loading) return <div style={styles.loading}>Recuperando logs da rede...</div>;
+  if (loading) return <div style={styles.loading}>Sincronizando frequências...</div>;
 
   return (
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={styles.headerContent}>
-          <h2 style={{color: '#00f2fe', letterSpacing: 4}}>OUVI</h2>
+          <h2 style={{color: '#00f2fe', letterSpacing: 4, margin: 0}}>OUVI</h2>
           <button onClick={() => supabase.auth.signOut().then(() => window.location.reload())} style={styles.logoutBtn}>SAIR</button>
         </div>
       </header>
 
       <main style={styles.feed}>
+        {/* Card de Criação */}
         <div style={styles.createCard}>
           <textarea 
-            placeholder="No que está pensando, Felipe?" 
+            placeholder="Compartilhe sua vibração, Felipe..." 
             value={newPost} 
             onChange={(e) => setNewPost(e.target.value)} 
             style={styles.createInput} 
           />
           <div style={styles.createActions}>
-            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Foto</button>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Adicionar Foto</button>
             <input type="file" ref={fileInputRef} hidden onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
-            <button onClick={handleCreatePost} style={styles.publishBtn}>{status === "uploading" ? "..." : "Publicar"}</button>
+            <button onClick={handleCreatePost} style={styles.publishBtn} disabled={status !== "idle"}>
+              {status === "uploading" ? "ENVIANDO..." : "PUBLICAR"}
+            </button>
           </div>
         </div>
 
+        {/* Listagem de Logs (Posts) */}
         {posts.map((post) => (
           <article key={post.id} style={styles.card}>
             <div style={styles.cardHeader}>
-              <div style={{...styles.avatarSmall, backgroundImage: `url(${post.profiles?.avatar_url || ''})` || 'none', backgroundColor: '#222'}} />
+              <div style={{...styles.avatarSmall, backgroundImage: `url(${post.profiles?.avatar_url || ''})`, backgroundColor: '#222'}} />
               <div>
                 <div style={styles.username}>@{post.profiles?.username || post.user_email?.split('@')[0]}</div>
                 <div style={styles.meta}>{formatTime(post.created_at)}</div>
               </div>
             </div>
 
-            {post.image_url && <img src={post.image_url} style={styles.postImg} />}
-            <div style={styles.caption}>{post.content}</div>
+            {post.image_url && <img src={post.image_url} style={styles.postImg} alt="Log visual" />}
+            
+            {/* 🛡️ ÁREA DE DESCRIÇÃO GARANTIDA */}
+            <div style={styles.caption}>
+              {post.content ? post.content : <span style={{opacity: 0.3, fontStyle: 'italic'}}>Sem descrição no log.</span>}
+            </div>
 
             <div style={styles.actions}>
-              {/* Esse botão abre os áudios que já foram enviados para este post */}
               <button 
                 style={styles.listenBtn} 
-                onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
+                onClick={() => { 
+                  console.log("Abrindo áudios para o post:", post.id); // Log para debug
+                  setActivePostId(post.id); 
+                  setOpenThread(true); 
+                }}
               >
                 🎙️ OUVIR RESSONÂNCIAS
               </button>
@@ -149,7 +161,7 @@ export default function DashboardPage() {
         ))}
       </main>
 
-      {/* Componente que puxa os áudios do banco de dados */}
+      {/* COMPONENTE DE ÁUDIO (Recupera áudios do banco via postId) */}
       {activePostId && (
         <AudioThreadDrawer 
           postId={activePostId} 
@@ -163,23 +175,23 @@ export default function DashboardPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
-  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.9)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
-  headerContent: { width: "100%", maxWidth: 420, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px" },
-  logoutBtn: { background: "none", border: "none", color: "#ff3040", fontWeight: "bold", cursor: "pointer", fontSize: 12 },
-  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 0" },
-  createCard: { width: "90%", maxWidth: 420, background: "#080808", borderRadius: 20, border: "1px solid #151515", padding: 16 },
-  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", fontSize: 15, minHeight: 60, resize: 'none' },
-  createActions: { display: "flex", justifyContent: "space-between", marginTop: 10 },
-  mediaBtn: { background: "#111", color: "#fff", border: "none", padding: "8px 15px", borderRadius: 10, fontSize: 12 },
-  publishBtn: { background: "#fff", color: "#000", border: "none", padding: "8px 20px", borderRadius: 10, fontWeight: "bold", fontSize: 12 },
-  card: { width: "90%", maxWidth: 420, background: "#080808", borderRadius: 20, border: "1px solid #151515", overflow: "hidden" },
-  cardHeader: { display: "flex", gap: 10, padding: 15, alignItems: "center" },
-  avatarSmall: { width: 32, height: 32, borderRadius: '50%', backgroundSize: 'cover' },
-  username: { fontWeight: "bold", fontSize: 13 },
-  meta: { fontSize: 11, opacity: 0.4 },
-  postImg: { width: "100%", height: "auto", display: "block" },
-  caption: { padding: "15px", fontSize: 14, lineHeight: 1.5 },
-  actions: { padding: "0 15px 15px" },
-  listenBtn: { width: "100%", background: "rgba(0,242,254,0.1)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 15, padding: "12px", fontWeight: "bold", fontSize: 11, cursor: "pointer" },
-  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" }
+  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.95)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 450, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px" },
+  logoutBtn: { background: "none", border: "none", color: "#ff3040", fontWeight: "bold", cursor: "pointer", fontSize: 11 },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 25, padding: "20px 0" },
+  createCard: { width: "90%", maxWidth: 420, background: "#0a0a0a", borderRadius: 24, border: "1px solid #1a1a1a", padding: 20 },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", fontSize: 15, minHeight: 80, resize: 'none' },
+  createActions: { display: "flex", justifyContent: "space-between", marginTop: 15, borderTop: '1px solid #1a1a1a', paddingTop: 15 },
+  mediaBtn: { background: "#111", color: "#888", border: "1px solid #222", padding: "8px 16px", borderRadius: 12, fontSize: 12, cursor: 'pointer' },
+  publishBtn: { background: "#fff", color: "#000", border: "none", padding: "8px 24px", borderRadius: 12, fontWeight: "bold", fontSize: 12, cursor: 'pointer' },
+  card: { width: "90%", maxWidth: 420, background: "#0a0a0a", borderRadius: 28, border: "1px solid #111", overflow: "hidden" },
+  cardHeader: { display: "flex", gap: 12, padding: 18, alignItems: "center" },
+  avatarSmall: { width: 36, height: 36, borderRadius: '50%', backgroundSize: 'cover', backgroundPosition: 'center' },
+  username: { fontWeight: "bold", fontSize: 14, color: '#efefef' },
+  meta: { fontSize: 11, opacity: 0.4, marginTop: 2 },
+  postImg: { width: "100%", height: "auto", display: "block", borderBottom: '1px solid #111' },
+  caption: { padding: "18px", fontSize: 15, lineHeight: 1.6, color: '#ddd' },
+  actions: { padding: "0 18px 18px" },
+  listenBtn: { width: "100%", background: "rgba(0,242,254,0.08)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 18, padding: "14px", fontWeight: "bold", fontSize: 12, cursor: "pointer", transition: '0.2s' },
+  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, letterSpacing: 2 }
 };
