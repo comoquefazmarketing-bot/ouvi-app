@@ -4,7 +4,8 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
-export default function DashboardPage() {
+// Nome alterado para DashboardV5Page para forçar o Next.js a recompilar do zero
+export default function DashboardV5Page() {
   const [userProfile, setUserProfile] = useState<{username: string, avatar_url?: string} | null>(null);
   const [checkingProfile, setCheckingProfile] = useState(true);
   const [tempNick, setTempNick] = useState("");
@@ -21,11 +22,11 @@ export default function DashboardPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationFrameId = useRef<number | null>(null);
 
-  // --- ANIMAÇÃO DE CONVERGÊNCIA CYMATIC (PARTÍCULAS DE AREIA) ---
+  // --- ANIMAÇÃO DE CONVERGÊNCIA CYMATIC (IDENTIDADE OUVI) ---
   const startCymaticAnimation = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false });
     if (!ctx) return;
 
     canvas.width = window.innerWidth;
@@ -36,14 +37,14 @@ export default function DashboardPage() {
 
     for (let i = 0; i < numParticles; i++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = Math.max(canvas.width, canvas.height); // Começam longe
+      const spawnDist = Math.max(canvas.width, canvas.height);
       particles.push({
-        x: canvas.width / 2 + Math.cos(angle) * dist,
-        y: canvas.height / 2 + Math.sin(angle) * dist,
-        targetX: Math.random() * canvas.width,
-        targetY: Math.random() * canvas.height,
-        size: Math.random() * 1.5,
-        color: i % 3 === 0 ? "#00f2fe" : "#0077ff",
+        x: canvas.width / 2 + Math.cos(angle) * spawnDist,
+        y: canvas.height / 2 + Math.sin(angle) * spawnDist,
+        originX: Math.random() * canvas.width,
+        originY: Math.random() * canvas.height,
+        size: Math.random() * 1.6,
+        color: i % 2 === 0 ? "#00f2fe" : "#0055ff",
         speed: 0.02 + Math.random() * 0.04
       });
     }
@@ -57,15 +58,14 @@ export default function DashboardPage() {
       const time = t * 0.0006;
 
       particles.forEach((p) => {
-        // Padrão de Chladni para a forma central
-        const xNorm = (p.targetX - centerX) / 280;
-        const yNorm = (p.targetY - centerY) / 280;
+        const xNorm = (p.originX - centerX) / 280;
+        const yNorm = (p.originY - centerY) / 280;
         const n = 5 + Math.sin(time) * 2;
         const m = 4 + Math.cos(time) * 2;
         const vib = Math.sin(n * xNorm) * Math.sin(m * yNorm) + Math.sin(m * xNorm) * Math.sin(n * yNorm);
         
-        const destX = p.targetX + vib * 50 * Math.cos(time);
-        const destY = p.targetY + vib * 50 * Math.sin(time);
+        const destX = p.originX + vib * 50 * Math.cos(time);
+        const destY = p.originY + vib * 50 * Math.sin(time);
 
         p.x += (destX - p.x) * p.speed;
         p.y += (destY - p.y) * p.speed;
@@ -76,11 +76,11 @@ export default function DashboardPage() {
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
 
-        // Reflexo Aquático
-        ctx.globalAlpha = 0.1;
+        ctx.globalAlpha = 0.12;
         ctx.beginPath();
         ctx.arc(p.x, canvas.height - (p.y * 0.4), p.size, 0, Math.PI * 2);
         ctx.fill();
+        ctx.globalAlpha = 1.0;
       });
 
       animationFrameId.current = requestAnimationFrame(draw);
@@ -90,11 +90,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     loadUserAndFeed();
-    if (!userProfile && !checkingProfile) {
-      startCymaticAnimation();
-    }
+    startCymaticAnimation(); // Ativa a animação para ambos os estados
     return () => { if (animationFrameId.current) cancelAnimationFrame(animationFrameId.current); };
-  }, [userProfile, checkingProfile, startCymaticAnimation]);
+  }, [startCymaticAnimation]);
 
   async function loadUserAndFeed() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -120,26 +118,26 @@ export default function DashboardPage() {
 
     const { error } = await supabase.from("profiles").insert([{ id: session?.user.id, username: nick, avatar_url: url }]);
     if (error) {
-      alert("Erro ao salvar perfil.");
+      alert("Nick já existe!");
       setIsSaving(false);
     } else {
-      setUserProfile({ username: nick, avatar_url: url || "" });
+      window.location.reload(); 
     }
   }
 
   if (checkingProfile) return <div style={styles.loading}>Sintonizando...</div>;
 
-  if (!userProfile) {
-    return (
-      <div style={styles.onboarding}>
-        <canvas ref={canvasRef} style={styles.canvas} />
-        {/* Card central agora mais transparente e moderno */}
+  return (
+    <div style={styles.containerMain}>
+      <canvas ref={canvasRef} style={styles.canvas} />
+
+      {!userProfile ? (
         <div style={styles.onboardingContent}>
           <h1 style={styles.title}>OUVI</h1>
           <p style={styles.subtitle}>Sua voz em ressonância.</p>
 
           <div onClick={() => avatarInputRef.current?.click()} style={{...styles.avatarBox, backgroundImage: avatarPreview ? `url(${avatarPreview})` : 'none'}}>
-            {!avatarPreview && <span style={{fontSize: 24}}>📸</span>}
+            {!avatarPreview && <span>📸</span>}
             <div style={styles.plus}>+</div>
           </div>
           <input type="file" ref={avatarInputRef} hidden onChange={(e) => {
@@ -148,61 +146,52 @@ export default function DashboardPage() {
           }} />
 
           <div style={styles.inputArea}>
-            <span style={{color: '#00f2fe', fontWeight: 'bold'}}>@</span>
-            <input placeholder="seu_nick" style={styles.input} onChange={(e) => setTempNick(e.target.value)} />
+            <span style={{color: '#00f2fe'}}>@</span>
+            <input placeholder="nick_exclusivo" style={styles.input} onChange={(e) => setTempNick(e.target.value)} />
           </div>
 
           <button onClick={handleSaveProfile} style={styles.btn} disabled={isSaving}>
-            {isSaving ? "CRIANDO PERFIL..." : "ENTRAR NA REDE"}
+            {isSaving ? "CONFIGURANDO..." : "ENTRAR NA REDE"}
           </button>
         </div>
-      </div>
-    );
-  }
-
-  // Dashboard simplificado para teste após onboarding
-  return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <div style={styles.headerContent}>
-          <h2 style={{fontSize: 18, color: '#00f2fe'}}>OUVI</h2>
-          <button onClick={() => supabase.auth.signOut().then(() => location.reload())} style={styles.logout}>SAIR</button>
+      ) : (
+        <div style={styles.pageUI}>
+          <header style={styles.header}>
+            <div style={styles.headerContent}>
+              <h2 style={{color: '#00f2fe', letterSpacing: 4, margin: 0}}>OUVI</h2>
+              <button onClick={() => supabase.auth.signOut().then(() => location.reload())} style={styles.logout}>SAIR</button>
+            </div>
+          </header>
+          <main style={styles.mainFeed}>
+            <h2 style={{fontSize: 28, fontWeight: 900}}>Olá, @{userProfile.username}!</h2>
+            <p style={{color: 'rgba(255,255,255,0.5)'}}>A experiência visual foi concluída e o feed está pronto.</p>
+          </main>
         </div>
-      </header>
-      <main style={{textAlign: 'center', padding: 50}}>
-        <h1>Olá, @{userProfile.username}</h1>
-        <p>Você está conectado à rede.</p>
-      </main>
+      )}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  onboarding: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden' },
+  containerMain: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative', overflow: 'hidden', color: '#fff' },
   canvas: { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', zIndex: 1 },
   onboardingContent: { 
-    zIndex: 2, 
-    width: '90%', 
-    maxWidth: 360, 
-    textAlign: 'center', 
-    // MUDANÇA AQUI: Background mais transparente com blur (vidro)
-    background: 'rgba(0, 0, 0, 0.4)', 
-    padding: '40px 30px', 
-    borderRadius: 40, 
-    backdropFilter: 'blur(15px)', 
-    border: '1px solid rgba(255, 255, 255, 0.1)', 
-    boxShadow: '0 20px 50px rgba(0,0,0,0.3)' 
+    zIndex: 2, width: '90%', maxWidth: 350, textAlign: 'center', 
+    background: 'rgba(0,0,0,0.4)', padding: '45px 30px', borderRadius: 45, 
+    backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.1)', 
+    boxShadow: '0 25px 50px rgba(0,0,0,0.5)' 
   },
-  title: { fontSize: 40, letterSpacing: 12, fontWeight: 900, color: '#fff', marginBottom: 5 },
+  title: { fontSize: 40, letterSpacing: 10, fontWeight: 900, color: '#fff', marginBottom: 5 },
   subtitle: { color: 'rgba(255,255,255,0.4)', fontSize: 13, marginBottom: 35, letterSpacing: 1 },
   avatarBox: { width: 110, height: 110, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', border: '2px solid #00f2fe', margin: '0 auto 30px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', position: 'relative', backgroundSize: 'cover', backgroundPosition: 'center' },
   plus: { position: 'absolute', bottom: 5, right: 5, background: '#00f2fe', color: '#000', width: 28, height: 28, borderRadius: '50%', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #000' },
-  inputArea: { display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '15px 20px', borderRadius: 20, marginBottom: 25 },
+  inputArea: { display: 'flex', alignItems: 'center', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '16px 20px', borderRadius: 20, marginBottom: 25 },
   input: { background: 'none', border: 'none', color: '#fff', marginLeft: 10, outline: 'none', width: '100%', fontSize: 16 },
   btn: { width: '100%', padding: 18, borderRadius: 20, background: '#00f2fe', color: '#000', fontWeight: 'bold', border: 'none', cursor: 'pointer', fontSize: 15, letterSpacing: 1 },
-  page: { background: '#000', minHeight: '100vh', color: '#fff' },
-  header: { borderBottom: '1px solid #111', display: 'flex', justifyContent: 'center' },
-  headerContent: { width: '100%', maxWidth: 420, display: 'flex', justifyContent: 'space-between', padding: 15, alignItems: 'center' },
+  pageUI: { zIndex: 2, width: '100%', height: '100%', display: 'flex', flexDirection: 'column' },
+  header: { background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(10px)', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'center' },
+  headerContent: { width: '100%', maxWidth: 600, display: 'flex', justifyContent: 'space-between', padding: '20px', alignItems: 'center' },
   logout: { background: 'none', border: 'none', color: '#ff3040', fontWeight: 'bold', cursor: 'pointer' },
-  loading: { height: '100vh', background: '#000', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  mainFeed: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20, textAlign: 'center' },
+  loading: { height: '100vh', background: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff' }
 };
