@@ -39,15 +39,24 @@ export default function DashboardPage() {
     return () => { mounted = false };
   }, []);
 
+  // 🛠️ CORREÇÃO AQUI: Adicionado o join com profiles para o feed aparecer
   async function fetchPosts(mounted = true) {
-    // 🛡️ Ajustado para trazer os dados do autor (profiles)
     const { data, error } = await supabase
       .from("posts")
-      .select("*, profiles(username, avatar_url)")
+      .select(`
+        *,
+        profiles (
+          username,
+          avatar_url
+        )
+      `)
       .order("created_at", { ascending: false });
 
     if (!error && mounted) {
       setPosts(data || []);
+      setLoading(false);
+    } else if (error) {
+      console.error("Erro ao buscar posts:", error);
       setLoading(false);
     }
   }
@@ -109,81 +118,63 @@ export default function DashboardPage() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-            <img src="/logo-dashboard.svg" alt="OUVI" style={styles.logoImg} />
+            <h2 style={{color: '#00f2fe', margin: 0, fontSize: 18, letterSpacing: 2}}>OUVI</h2>
             <div style={styles.searchBar}><span>🔍 Pesquisar...</span></div>
           </div>
           <div style={styles.headerRight}>
-             <span style={styles.headerUserName}>{user?.user_metadata?.full_name?.split(' ')[0]}</span>
+             <span style={styles.headerUserName}>{user?.user_metadata?.full_name?.split(' ')[0] || "User"}</span>
              <button onClick={() => supabase.auth.signOut().then(() => window.location.href="/")} style={styles.logoutBtn}>SAIR</button>
           </div>
         </div>
       </header>
 
       <main style={styles.feed}>
+        {/* Card de Criação */}
         <div style={styles.createCard}>
            <div style={styles.createHeader}>
-              <div style={{...styles.avatarSmall, backgroundImage: user?.user_metadata?.avatar_url ? `url(${user.user_metadata.avatar_url})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundColor: '#333'}} />
+              <div style={{...styles.avatarSmall, background: '#333', backgroundImage: user?.user_metadata?.avatar_url ? `url(${user.user_metadata.avatar_url})` : 'none', backgroundSize: 'cover'}} />
               <span style={styles.username}>{user?.user_metadata?.full_name || "Seu Perfil"}</span>
            </div>
            <textarea 
-            placeholder="No que você está pensando?" 
+            placeholder="No que está pensando, Felipe Makarios?" 
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
             style={styles.createInput}
             disabled={status !== "idle"}
           />
-          {selectedImage && <div style={{fontSize: 10, color: '#00f2fe', marginBottom: 5, fontWeight: 'bold'}}>✓ Imagem preparada</div>}
           <div style={styles.createActions}>
-            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn} disabled={status !== "idle"}>🖼️ Foto</button>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Foto</button>
             <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
-            <button 
-              onClick={handleCreatePost}
-              style={{...styles.publishBtn, opacity: status !== "idle" ? 0.6 : 1}}
-              disabled={status !== "idle"}
-            >
-              {status === "uploading" ? "Sintonizando..." : status === "success" ? "Publicado ✓" : "Publicar"}
+            <button onClick={handleCreatePost} style={styles.publishBtn} disabled={status !== "idle"}>
+              {status === "uploading" ? "..." : "Publicar"}
             </button>
           </div>
         </div>
 
+        {/* Listagem de Posts */}
         {posts.map((post) => {
-          // Lógica de fallback para username e avatar
-          const postUser = post.profiles?.username || post.user_email?.split("@")[0] || "membro";
-          const postAvatar = post.profiles?.avatar_url || (post.user_id === user?.id ? user?.user_metadata?.avatar_url : null);
-          
+          const displayNick = post.profiles?.username || post.user_email?.split("@")[0] || "membro";
           return (
             <article key={post.id} style={styles.card}>
               <div style={styles.cardHeader}>
                 <div style={styles.avatarContainer}>
-                  {postAvatar ? (
-                    <img src={postAvatar} style={styles.avatarImg} alt="" />
-                  ) : <div style={styles.avatarPlaceholder} />}
+                  {post.profiles?.avatar_url && <img src={post.profiles.avatar_url} style={styles.avatarImg} alt="" />}
+                  <div style={styles.avatarPlaceholder} />
                 </div>
                 <div>
-                  <div style={styles.username}>@{postUser}</div>
+                  <div style={styles.username}>@{displayNick}</div>
                   <div style={styles.meta}>{formatTime(post.created_at)}</div>
                 </div>
               </div>
-
-              <div style={styles.media}>
-                {post.image_url ? (
-                  <img src={post.image_url} alt="" style={styles.postImg} />
-                ) : (
-                  <div style={{padding: 40, textAlign: 'center'}}>{post.content}</div>
-                )}
-              </div>
-
-              <div style={styles.actions}>
-                <button style={styles.iconBtn}>🤍</button>
-                <button style={styles.listenBtn} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️ OUVIR RESSONÂNCIAS</button>
-                <button style={styles.iconBtn}>🚀</button>
-              </div>
-
-              {post.image_url && post.content && (
+              <div style={styles.contentArea}>
+                {post.image_url && <img src={post.image_url} style={styles.postImg} />}
                 <div style={styles.caption}>
-                  <strong>@{postUser}</strong> {post.content}
+                  <strong>@{displayNick}</strong> {post.content}
                 </div>
-              )}
+              </div>
+              <div style={styles.actions}>
+                <button style={styles.listenBtn} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️ OUVIR RESSONÂNCIAS</button>
+              </div>
             </article>
           );
         })}
@@ -196,34 +187,30 @@ export default function DashboardPage() {
 
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
-  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(10px)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
-  headerContent: { width: "100%", maxWidth: 420, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" },
-  headerLeft: { display: "flex", alignItems: "center", gap: 12, flex: 1 },
+  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.9)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 450, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px" },
+  headerLeft: { display: "flex", alignItems: "center", gap: 15 },
   headerRight: { display: 'flex', alignItems: 'center', gap: 10 },
-  headerUserName: { fontSize: 10, opacity: 0.5, fontWeight: 'bold', textTransform: 'uppercase' },
-  logoImg: { height: 20, objectFit: "contain" },
-  searchBar: { background: "#111", padding: "6px 12px", borderRadius: 20, flex: 0.8, fontSize: 12, color: "#444", border: "1px solid #1a1a1a" },
+  searchBar: { background: "#111", padding: "6px 12px", borderRadius: 20, fontSize: 12, color: "#444", border: "1px solid #1a1a1a" },
   logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 10, fontWeight: "bold", cursor: "pointer" },
-  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "20px 0" },
-  createCard: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", padding: 16 },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 0" },
+  createCard: { width: "90%", maxWidth: 420, background: "#080808", borderRadius: 20, border: "1px solid #151515", padding: 16 },
   createHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 },
   avatarSmall: { width: 28, height: 28, borderRadius: '50%' },
-  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 14, minHeight: 40 },
-  createActions: { display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1px solid #151515" },
-  mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 8, fontSize: 11, cursor: "pointer" },
-  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "6px 16px", borderRadius: 8, fontSize: 11, fontWeight: "bold", cursor: "pointer" },
-  card: { width: "100%", maxWidth: 420, background: "#080808", borderRadius: 24, border: "1px solid #151515", overflow: "hidden" },
-  cardHeader: { display: "flex", gap: 12, padding: 16, alignItems: "center" },
-  avatarContainer: { width: 36, height: 36, borderRadius: "50%", overflow: 'hidden', background: '#111', border: '1px solid #222', position: 'relative' },
-  avatarImg: { width: '100%', height: '100%', objectFit: 'cover' },
-  avatarPlaceholder: { width: '100%', height: '100%', background: 'linear-gradient(45deg,#222,#080808)' },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", fontSize: 14, minHeight: 40, resize: 'none' },
+  createActions: { display: "flex", justifyContent: "space-between", marginTop: 10 },
+  mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "6px 12px", borderRadius: 8, fontSize: 11 },
+  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "6px 16px", borderRadius: 8, fontSize: 11, fontWeight: "bold" },
+  card: { width: "90%", maxWidth: 420, background: "#080808", borderRadius: 20, border: "1px solid #151515", overflow: "hidden" },
+  cardHeader: { display: "flex", gap: 12, padding: 12, alignItems: "center" },
+  avatarContainer: { width: 32, height: 32, borderRadius: "50%", overflow: 'hidden', background: '#222', position: 'relative' },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', zIndex: 2 },
+  avatarPlaceholder: { width: '100%', height: '100%', background: '#333' },
   username: { fontWeight: 700, fontSize: 13 },
-  meta: { fontSize: 11, opacity: 0.5 },
-  media: { minHeight: 100, background: "#0a0a0a", display: "grid", placeItems: "center" },
+  meta: { fontSize: 10, opacity: 0.5 },
   postImg: { width: "100%", height: "auto", display: "block" },
-  actions: { display: "flex", alignItems: "center", gap: 12, padding: "14px 16px" },
-  iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 14, padding: 12, cursor: "pointer", color: "#fff" },
-  listenBtn: { flex: 1, background: "rgba(0,242,254,0.12)", border: "1px solid rgba(0,242,254,0.35)", color: "#00f2fe", borderRadius: 14, padding: "12px", fontWeight: 800, fontSize: 11, letterSpacing: 0.6, cursor: "pointer" },
-  caption: { padding: "0 16px 16px", fontSize: 14, lineHeight: 1.4, opacity: 0.9 },
+  caption: { padding: "12px", fontSize: 14 },
+  actions: { padding: "0 12px 12px" },
+  listenBtn: { width: "100%", background: "rgba(0,242,254,0.1)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 12, padding: "10px", fontWeight: "bold", fontSize: 11, cursor: "pointer" },
   loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
 };
