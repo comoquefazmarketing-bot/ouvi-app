@@ -2,141 +2,217 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
+import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
-interface Props {
-  postId: string;
-  open: boolean;
-  onClose: () => void;
-}
+const formatTime = (date: string) => {
+  const diff = new Date().getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return new Date(date).toLocaleDateString();
+};
 
-export default function AudioThreadDrawer({ postId, open, onClose }: Props) {
-  const [audios, setAudios] = useState<any[]>([]);
-  const [isRecording, setIsRecording] = useState(false);
+export default function DashboardPage() {
+  const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-
-  const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
+  const [user, setUser] = useState<any>(null);
+  const [activePostId, setActivePostId] = useState<string | null>(null);
+  const [openThread, setOpenThread] = useState(false);
+  
+  const [newPost, setNewPost] = useState("");
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "success">("idle");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) fetchAudios();
-  }, [open, postId]);
+    let mounted = true;
+    async function loadInitialData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted && session?.user) setUser(session.user);
+      await fetchPosts(mounted);
+    }
+    loadInitialData();
+    return () => { mounted = false };
+  }, []);
 
-  async function fetchAudios() {
-    setLoading(true);
+  async function fetchPosts(mounted = true) {
+    // 🎯 Busca os posts garantindo a relação com os perfis para as fotos e usernames
     const { data, error } = await supabase
-      .from("audios")
+      .from("posts")
       .select(`*, profiles (username, avatar_url)`)
-      .eq("post_id", postId) // 🎯 Filtro crucial: apenas áudios deste post
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false });
 
-    if (!error) setAudios(data || []);
-    setLoading(false);
-  }
-
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-
-      recorder.ondataavailable = (e) => chunksRef.current.push(e.data);
-      recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
-        await uploadAudio(audioBlob);
-      };
-
-      recorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      alert("Erro ao acessar microfone");
+    if (!error && mounted) {
+      setPosts(data || []);
+      setLoading(false);
+    } else {
+      console.error("Erro no feed:", error);
+      setLoading(false);
     }
   }
 
-  function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    setIsRecording(false);
+  async function handleCreatePost() {
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
+    const finalUserId = (!currentUser || currentUser.id === '00000000-0000-0000-0000-000000000000') 
+      ? REAL_USER_ID : currentUser.id;
+
+    if (!newPost.trim() && !selectedImage) return;
+    setStatus("uploading");
+
+    try {
+      let imageUrl = null;
+      if (selectedImage) {
+        const fileName = `${finalUserId}-${Date.now()}`;
+        await supabase.storage.from("post-images").upload(`post-photos/${fileName}`, selectedImage);
+        imageUrl = supabase.storage.from("post-images").getPublicUrl(`post-photos/${fileName}`).data.publicUrl;
+      }
+
+      const { error } = await supabase.from("posts").insert([{
+        content: newPost,
+        image_url: imageUrl,
+        user_id: finalUserId,
+        user_email: currentUser?.email || "felipe@ouvi.app"
+      }]);
+
+      if (error) throw error;
+      setStatus("success");
+      setTimeout(() => { 
+        setNewPost(""); 
+        setSelectedImage(null); 
+        setStatus("idle"); 
+        fetchPosts(); 
+      }, 800);
+    } catch (err: any) {
+      alert(err.message);
+      setStatus("idle");
+    }
   }
 
-  async function uploadAudio(blob: Blob) {
-    const fileName = `${REAL_USER_ID}-${Date.now()}.webm`;
-    const filePath = `resonances/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("post-audios")
-      .upload(filePath, blob);
-
-    if (uploadError) return alert("Erro no upload");
-
-    const { data: publicUrl } = supabase.storage.from("post-audios").getPublicUrl(filePath);
-
-    await supabase.from("audios").insert([{
-      post_id: postId,
-      user_id: REAL_USER_ID,
-      audio_url: publicUrl.publicUrl
-    }]);
-
-    fetchAudios();
-  }
-
-  if (!open) return null;
+  if (loading) return <div style={styles.loading}>Sintonizando ambiente...</div>;
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.drawer}>
-        <div style={styles.header}>
-          <button onClick={onClose} style={styles.closeBtn}>✕</button>
-          <span style={styles.title}>RESSONÂNCIAS</span>
+    <div style={styles.page}>
+      {/* 🛡️ CABEÇALHO COM LOGO E PESQUISA (Identidade image_19ee20) */}
+      <header style={styles.header}>
+        <div style={styles.headerContent}>
+          <div style={styles.headerLeft}>
+            <div style={styles.logoCircle}><img src="/logo-dashboard.svg" alt="" style={styles.logoImg} /></div>
+            <div style={styles.searchBar}>
+               <input type="text" placeholder="Pesquisar..." style={styles.searchInput} />
+            </div>
+          </div>
+          <div style={styles.headerRight}>
+             <span style={styles.headerUserName}>COMO</span>
+             <button onClick={() => supabase.auth.signOut().then(() => window.location.href="/")} style={styles.logoutBtn}>SAIR</button>
+          </div>
+        </div>
+      </header>
+
+      <main style={styles.feed}>
+        {/* CARD DE POSTAGEM - FELIPE MAKARIOS */}
+        <div style={styles.createCard}>
+           <div style={styles.createHeader}>
+              <div style={{...styles.avatarSmall, backgroundImage: user?.user_metadata?.avatar_url ? `url(${user.user_metadata.avatar_url})` : 'none', backgroundColor: '#222', backgroundSize: 'cover'}} />
+              <span style={styles.username}>Como Que Faz Felipe Makarios</span>
+           </div>
+           <textarea 
+            placeholder="No que você está pensando, Felipe?" 
+            value={newPost}
+            onChange={(e) => setNewPost(e.target.value)}
+            style={styles.createInput}
+          />
+          <div style={styles.createActions}>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Foto</button>
+            <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
+            <button onClick={handleCreatePost} style={styles.publishBtn}>
+              {status === "uploading" ? "..." : "Publicar"}
+            </button>
+          </div>
         </div>
 
-        <div style={styles.audioList}>
-          {loading ? (
-            <div style={styles.status}>Sincronizando frequências...</div>
-          ) : audios.length === 0 ? (
-            <div style={styles.status}>Nenhuma voz detectada ainda.</div>
-          ) : (
-            audios.map((audio) => (
-              <div key={audio.id} style={styles.audioItem}>
-                <div style={{...styles.avatar, backgroundImage: `url(${audio.profiles?.avatar_url})` || 'none'}} />
-                <div style={styles.audioContent}>
-                   <div style={styles.audioInfo}>@{audio.profiles?.username || 'membro'}</div>
-                   <audio src={audio.audio_url} controls style={styles.player} />
+        {/* FEED DE POSTS (Restaurado) */}
+        {posts.map((post) => {
+          const author = post.profiles?.username || post.user_email?.split('@')[0] || "membro";
+          return (
+            <article key={post.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div style={styles.avatarContainer}>
+                  {post.profiles?.avatar_url && <img src={post.profiles.avatar_url} style={styles.avatarImg} alt="" />}
+                  <div style={styles.avatarPlaceholder} />
+                </div>
+                <div>
+                  <div style={styles.username}>@{author}</div>
+                  <div style={styles.meta}>{formatTime(post.created_at)}</div>
                 </div>
               </div>
-            ))
-          )}
-        </div>
 
-        <div style={styles.footer}>
-          <button 
-            onMouseDown={startRecording} 
-            onMouseUp={stopRecording}
-            onTouchStart={startRecording}
-            onTouchEnd={stopRecording}
-            style={{...styles.recordBtn, background: isRecording ? '#ff3040' : '#00f2fe'}}
-          >
-            {isRecording ? "GRAVANDO..." : "SEGURE PARA FALAR"}
-          </button>
-        </div>
-      </div>
+              {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
+
+              <div style={styles.actions}>
+                <button style={styles.iconBtn}>🤍</button>
+                <button 
+                  style={styles.listenBtn} 
+                  onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
+                >
+                  🎙️ OUVIR RESSONÂNCIAS
+                </button>
+                <button style={styles.iconBtn}>🚀</button>
+              </div>
+
+              <div style={styles.caption}>
+                <strong>@{author}</strong> {post.content}
+              </div>
+            </article>
+          )
+        })}
+      </main>
+
+      {/* COMPONENTE DE ÁUDIO INTEGRADO */}
+      {activePostId && (
+        <AudioThreadDrawer 
+          postId={activePostId} 
+          open={openThread} 
+          onClose={() => setOpenThread(false)} 
+        />
+      )}
     </div>
   );
 }
 
 const styles: Record<string, React.CSSProperties> = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'flex-end' },
-  drawer: { width: '100%', maxWidth: 420, background: '#080808', borderTop: '1px solid #1a1a1a', borderRadius: '30px 30px 0 0', height: '80vh', display: 'flex', flexDirection: 'column' },
-  header: { padding: 20, display: 'flex', alignItems: 'center', borderBottom: '1px solid #111' },
-  closeBtn: { background: 'none', border: 'none', color: '#fff', fontSize: 20, marginRight: 15 },
-  title: { fontWeight: 'bold', fontSize: 12, letterSpacing: 2, color: '#444' },
-  audioList: { flex: 1, overflowY: 'auto', padding: 20 },
-  audioItem: { display: 'flex', gap: 12, marginBottom: 20, alignItems: 'center' },
-  avatar: { width: 35, height: 35, borderRadius: '50%', background: '#222', backgroundSize: 'cover' },
-  audioContent: { flex: 1 },
-  audioInfo: { fontSize: 11, fontWeight: 'bold', marginBottom: 5, color: '#666' },
-  player: { width: '100%', height: 35 },
-  status: { textAlign: 'center', marginTop: 50, fontSize: 12, opacity: 0.4 },
-  footer: { padding: 20, borderTop: '1px solid #111' },
-  recordBtn: { width: '100%', padding: 18, borderRadius: 20, border: 'none', fontWeight: 'bold', fontSize: 13, color: '#000', cursor: 'pointer' }
+  page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
+  header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px" },
+  headerLeft: { display: "flex", alignItems: "center", gap: 15, flex: 1 },
+  logoCircle: { width: 30, height: 30, borderRadius: '50%', border: '1px solid #333', display: 'grid', placeItems: 'center' },
+  logoImg: { height: 18 },
+  searchBar: { background: "#111", padding: "8px 15px", borderRadius: 25, flex: 0.8, border: "1px solid #222" },
+  searchInput: { background: 'none', border: 'none', color: '#fff', fontSize: 13, outline: 'none', width: '100%' },
+  headerRight: { display: 'flex', alignItems: 'center', gap: 15 },
+  headerUserName: { fontSize: 10, color: '#444', fontWeight: 'bold' },
+  logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 11, fontWeight: "bold", cursor: "pointer" },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 0" },
+  createCard: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 25, border: "1px solid #151515", padding: 18 },
+  createHeader: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 },
+  avatarSmall: { width: 35, height: 35, borderRadius: '50%' },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 50 },
+  createActions: { display: "flex", justifyContent: "space-between", marginTop: 15, paddingTop: 15, borderTop: "1px solid #111" },
+  mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 12, cursor: "pointer" },
+  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "8px 24px", borderRadius: 10, fontSize: 12, fontWeight: "bold", cursor: "pointer" },
+  card: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 25, border: "1px solid #151515", overflow: "hidden" },
+  cardHeader: { display: "flex", gap: 12, padding: 15, alignItems: "center" },
+  avatarContainer: { width: 40, height: 40, borderRadius: "50%", overflow: 'hidden', background: '#111', position: 'relative' },
+  avatarImg: { width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', zIndex: 2 },
+  avatarPlaceholder: { width: '100%', height: '100%', background: '#222' },
+  username: { fontWeight: 700, fontSize: 14 },
+  meta: { fontSize: 11, opacity: 0.5 },
+  postImg: { width: "100%", height: "auto", display: "block" },
+  actions: { display: "flex", alignItems: "center", gap: 12, padding: "15px" },
+  iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 15, padding: 10, cursor: "pointer", color: "#fff" },
+  listenBtn: { flex: 1, background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 15, padding: "12px", fontWeight: "bold", fontSize: 11, letterSpacing: 1, cursor: "pointer" },
+  caption: { padding: "0 15px 20px", fontSize: 14, lineHeight: 1.5 },
+  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
 };
