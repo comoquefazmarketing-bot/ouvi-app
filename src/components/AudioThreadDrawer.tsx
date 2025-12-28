@@ -4,60 +4,106 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
+// 🕒 Função de Formatação de Tempo Original do Código Mestre
+const formatTime = (date: string) => {
+  const diff = new Date().getTime() - new Date(date).getTime();
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "agora";
+  if (minutes < 60) return `há ${minutes}min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `há ${hours}h`;
+  return new Date(date).toLocaleDateString();
+};
+
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
   const [activePostId, setActivePostId] = useState<string | null>(null);
   const [openThread, setOpenThread] = useState(false);
+  
   const [newPost, setNewPost] = useState("");
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [status, setStatus] = useState<"idle" | "uploading" | "success">("idle");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetchPosts();
+    let mounted = true;
+    async function loadInitialData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (mounted && session?.user) setUser(session.user);
+      await fetchPosts(mounted);
+    }
+    loadInitialData();
+    return () => { mounted = false };
   }, []);
 
-  async function fetchPosts() {
+  async function fetchPosts(mounted = true) {
     const { data, error } = await supabase
       .from("posts")
       .select(`*, profiles (username, avatar_url)`)
       .order("created_at", { ascending: false });
 
-    if (!error) setPosts(data || []);
-    setLoading(false);
+    if (!error && mounted) {
+      setPosts(data || []);
+      setLoading(false);
+    } else {
+      setLoading(false);
+    }
   }
 
   async function handleCreatePost() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
     const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
-    
-    let imageUrl = null;
-    if (selectedImage) {
-      const fileName = `${Date.now()}`;
-      await supabase.storage.from("post-images").upload(`photos/${fileName}`, selectedImage);
-      imageUrl = supabase.storage.from("post-images").getPublicUrl(`photos/${fileName}`).data.publicUrl;
+    const finalUserId = (!currentUser || currentUser.id === '00000000-0000-0000-0000-000000000000') 
+      ? REAL_USER_ID : currentUser.id;
+
+    if (!newPost.trim() && !selectedImage) return;
+    setStatus("uploading");
+
+    try {
+      let imageUrl = null;
+      if (selectedImage) {
+        const fileName = `${finalUserId}-${Date.now()}`;
+        await supabase.storage.from("post-images").upload(`post-photos/${fileName}`, selectedImage);
+        imageUrl = supabase.storage.from("post-images").getPublicUrl(`post-photos/${fileName}`).data.publicUrl;
+      }
+
+      const { error } = await supabase.from("posts").insert([{
+        content: newPost,
+        image_url: imageUrl,
+        user_id: finalUserId,
+        user_email: currentUser?.email || "felipe@ouvi.app"
+      }]);
+
+      if (error) throw error;
+      setStatus("success");
+      setTimeout(() => { 
+        setNewPost(""); 
+        setSelectedImage(null); 
+        setStatus("idle"); 
+        fetchPosts(); 
+      }, 800);
+    } catch (err: any) {
+      alert(err.message);
+      setStatus("idle");
     }
-
-    await supabase.from("posts").insert([{
-      content: newPost,
-      image_url: imageUrl,
-      user_id: user?.id || REAL_USER_ID,
-      user_email: user?.email || "felipe@ouvi.app"
-    }]);
-
-    setNewPost("");
-    setSelectedImage(null);
-    fetchPosts();
   }
+
+  if (loading) return <div style={styles.loading}>Sincronizando logs...</div>;
 
   return (
     <div style={styles.page}>
-      {/* 🛡️ CABEÇALHO (image_19ee20) */}
+      {/* 🛡️ CABEÇALHO MESTRE (Logo + Pesquisa Arredondada) */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-            <div style={styles.logoCircle}><img src="/logo-dashboard.svg" alt="" style={styles.logoImg} /></div>
-            <div style={styles.searchBar}><input type="text" placeholder="Pesquisar..." style={styles.searchInput} /></div>
+            <div style={styles.logoCircle}>
+               <img src="/logo-dashboard.svg" alt="OUVI" style={styles.logoImg} />
+            </div>
+            <div style={styles.searchBar}>
+               <input type="text" placeholder="Pesquisar logs..." style={styles.searchInput} />
+            </div>
           </div>
           <div style={styles.headerRight}>
              <span style={styles.headerUserName}>COMO</span>
@@ -67,10 +113,10 @@ export default function DashboardPage() {
       </header>
 
       <main style={styles.feed}>
-        {/* CARD DE POSTAGEM (image_1a659e) */}
+        {/* CARD DE POSTAGEM - DESIGN FELIPE MAKARIOS */}
         <div style={styles.createCard}>
            <div style={styles.createHeader}>
-              <div style={{...styles.avatarSmall, backgroundColor: '#222'}} />
+              <div style={{...styles.avatarSmall, backgroundImage: user?.user_metadata?.avatar_url ? `url(${user.user_metadata.avatar_url})` : 'none', backgroundColor: '#222', backgroundSize: 'cover'}} />
               <span style={styles.username}>Como Que Faz Felipe Makarios</span>
            </div>
            <textarea 
@@ -82,15 +128,16 @@ export default function DashboardPage() {
           <div style={styles.createActions}>
             <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Foto</button>
             <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
-            <button onClick={handleCreatePost} style={styles.publishBtn}>Publicar</button>
+            <button onClick={handleCreatePost} style={styles.publishBtn}>
+              {status === "uploading" ? "..." : "Publicar"}
+            </button>
           </div>
         </div>
 
-        {/* LISTAGEM DE POSTS - FORÇANDO RENDERIZAÇÃO */}
-        {loading ? (
-          <div style={{marginTop: 50}}>Sintonizando frequências...</div>
-        ) : (
-          posts.map((post) => (
+        {/* FEED DE LOGS (Restaurado com Legendagem e Botões) */}
+        {posts.map((post) => {
+          const author = post.profiles?.username || post.user_email?.split('@')[0] || "membro";
+          return (
             <article key={post.id} style={styles.card}>
               <div style={styles.cardHeader}>
                 <div style={styles.avatarContainer}>
@@ -98,8 +145,8 @@ export default function DashboardPage() {
                   <div style={styles.avatarPlaceholder} />
                 </div>
                 <div>
-                  <div style={styles.username}>@{post.profiles?.username || 'membro'}</div>
-                  <div style={styles.meta}>agora</div>
+                  <div style={styles.username}>@{author}</div>
+                  <div style={styles.meta}>{formatTime(post.created_at)}</div>
                 </div>
               </div>
 
@@ -117,15 +164,15 @@ export default function DashboardPage() {
               </div>
 
               <div style={styles.caption}>
-                <strong>@{post.profiles?.username || 'membro'}</strong> {post.content}
+                <strong style={{color: '#fff'}}>@{author}</strong> <span style={{opacity: 0.9}}>{post.content}</span>
               </div>
             </article>
-          ))
-        )}
+          )
+        })}
       </main>
 
-      {/* COMPONENTE DE ÁUDIO (EXTERNO AO FEED PARA NÃO QUEBRAR) */}
-      {openThread && activePostId && (
+      {/* COMPONENTE DE ÁUDIO INTEGRADO */}
+      {activePostId && (
         <AudioThreadDrawer 
           postId={activePostId} 
           open={openThread} 
@@ -141,18 +188,18 @@ const styles: Record<string, React.CSSProperties> = {
   header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
   headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px" },
   headerLeft: { display: "flex", alignItems: "center", gap: 15, flex: 1 },
-  logoCircle: { width: 30, height: 30, borderRadius: '50%', border: '1px solid #333', display: 'grid', placeItems: 'center' },
-  logoImg: { height: 18 },
+  logoCircle: { width: 30, height: 30, borderRadius: '50%', border: '1px solid #333', display: 'grid', placeItems: 'center', overflow: 'hidden' },
+  logoImg: { height: 18, width: 'auto' },
   searchBar: { background: "#111", padding: "8px 15px", borderRadius: 25, flex: 0.8, border: "1px solid #222" },
   searchInput: { background: 'none', border: 'none', color: '#fff', fontSize: 13, outline: 'none', width: '100%' },
   headerRight: { display: 'flex', alignItems: 'center', gap: 15 },
   headerUserName: { fontSize: 10, color: '#444', fontWeight: 'bold' },
   logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 11, fontWeight: "bold", cursor: "pointer" },
-  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 20, padding: "20px 0" },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "20px 0" },
   createCard: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 25, border: "1px solid #151515", padding: 18 },
   createHeader: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 },
   avatarSmall: { width: 35, height: 35, borderRadius: '50%' },
-  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 50 },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 60 },
   createActions: { display: "flex", justifyContent: "space-between", marginTop: 15, paddingTop: 15, borderTop: "1px solid #111" },
   mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 12, cursor: "pointer" },
   publishBtn: { background: "#fff", border: "none", color: "#000", padding: "8px 24px", borderRadius: 10, fontSize: 12, fontWeight: "bold", cursor: "pointer" },
@@ -168,4 +215,5 @@ const styles: Record<string, React.CSSProperties> = {
   iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 15, padding: 10, cursor: "pointer", color: "#fff" },
   listenBtn: { flex: 1, background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 15, padding: "12px", fontWeight: "bold", fontSize: 11, letterSpacing: 1, cursor: "pointer" },
   caption: { padding: "0 15px 20px", fontSize: 14, lineHeight: 1.5 },
+  loading: { height: "100vh", background: "#000", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center" },
 };
