@@ -22,17 +22,16 @@ function PainelAcoes({ postId, open, onClose }: any) {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const MAX_TIME = 30;
 
-  // Busca sessão do usuário e comentários
   useEffect(() => {
     if (open && postId) {
-      const checkUser = async () => {
+      const getInitialData = async () => {
         const { data: { session } } = await supabase.auth.getSession();
         setUser(session?.user || null);
+        fetchComments();
       };
-      checkUser();
-      fetchComments();
+      
+      getInitialData();
 
-      // Realtime: Atualiza a lista sempre que houver novo comentário
       const channel = supabase.channel(`room_${postId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'audio_comments' }, () => {
           fetchComments();
@@ -43,7 +42,6 @@ function PainelAcoes({ postId, open, onClose }: any) {
     }
   }, [open, postId]);
 
-  // Lógica do cronômetro de gravação
   useEffect(() => {
     if (isRecording) {
       timerRef.current = setInterval(() => {
@@ -70,37 +68,38 @@ function PainelAcoes({ postId, open, onClose }: any) {
   }
 
   async function handleReact(commentId: string, emoji: string) {
-    if (!user) return alert("Faça login para interagir!");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return alert("Faça login para interagir!");
+
     const comment = comments.find(c => c.id === commentId);
     if (!comment) return;
 
     const currentReactions = comment.reactions || {};
     const userList = Array.isArray(currentReactions[emoji]) ? currentReactions[emoji] : [];
 
-    let newUserList = userList.includes(user.id) 
-      ? userList.filter((id: string) => id !== user.id) 
-      : [...userList, user.id];
+    let newUserList = userList.includes(session.user.id) 
+      ? userList.filter((id: string) => id !== session.user.id) 
+      : [...userList, session.user.id];
 
     const newReactions = { ...currentReactions, [emoji]: newUserList };
 
-    // Update Otimista (Interface responde na hora)
     setComments(prev => prev.map(c => c.id === commentId ? { ...c, reactions: newReactions } : c));
-
     await supabase.from("audio_comments").update({ reactions: newReactions }).eq("id", commentId);
   }
 
   async function handleSend(audioUrl: string | null = null) {
     if (!textComment.trim() && !audioUrl) return;
-    if (!user) return alert("Você precisa estar logado!");
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return alert("Sessão expirada. Faça login novamente.");
     
     setIsSending(true);
 
     const { error } = await supabase.from("audio_comments").insert([{
       post_id: postId,
-      parent_id: replyTarget?.id || null,
+      parent_id: replyTarget?.id || null, // LIGA A RESPOSTA AO PAI
       content: audioUrl ? null : textComment,
       audio_url: audioUrl,
-      user_id: user.id, // ID DINÂMICO DA SESSÃO
+      user_id: session.user.id,
       reactions: {}
     }]);
 
@@ -108,8 +107,6 @@ function PainelAcoes({ postId, open, onClose }: any) {
       setTextComment("");
       setReplyTarget(null);
       fetchComments();
-    } else {
-      console.error("Erro no envio:", error.message);
     }
     setIsSending(false);
   }
@@ -121,7 +118,6 @@ function PainelAcoes({ postId, open, onClose }: any) {
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
-      
       mediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -134,7 +130,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
       const stopHandler = () => { stopRecording(); window.removeEventListener("mouseup", stopHandler); window.removeEventListener("touchend", stopHandler); };
       window.addEventListener("mouseup", stopHandler);
       window.addEventListener("touchend", stopHandler);
-    } catch (err) { console.error("Mic bloqueado"); }
+    } catch (err) { alert("Microfone bloqueado."); }
   }
 
   function stopRecording() {
@@ -145,7 +141,6 @@ function PainelAcoes({ postId, open, onClose }: any) {
   async function uploadAudio(blob: Blob) {
     const fileName = `audio_${Date.now()}.webm`;
     const { error } = await supabase.storage.from("audio-comments").upload(`audios/${fileName}`, blob);
-    
     if (!error) {
       const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(`audios/${fileName}`);
       await handleSend(publicUrl);
@@ -158,7 +153,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
     const hasReacted = (emoji: string) => user && c.reactions?.[emoji]?.includes(user.id);
 
     return (
-      <div key={c.id} style={{ marginBottom: "20px", marginLeft: isReply ? "30px" : "0", borderLeft: isReply ? "1px solid #222" : "none", paddingLeft: isReply ? "15px" : "0" }}>
+      <div key={c.id} style={{ marginBottom: "20px", marginLeft: isReply ? "30px" : "0", borderLeft: isReply ? "1px solid #333" : "none", paddingLeft: isReply ? "15px" : "0" }}>
         <motion.div animate={isPlaying ? { scale: 0.98, borderColor: "#00f2fe" } : { scale: 1, borderColor: "#1a1a1a" }}
           style={{ background: isPlaying ? "rgba(0,242,254,0.1)" : "#111", padding: "12px", borderRadius: "20px", border: "1px solid", position: "relative" }}>
           <div style={{ color: "#00f2fe", fontSize: "9px", fontWeight: "bold", marginBottom: "4px" }}>@MEMBRO</div>
@@ -168,7 +163,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
         
         <div style={{ display: "flex", gap: "10px", marginTop: "8px", alignItems: "center", flexWrap: "wrap" }}>
           {c.reactions && Object.entries(c.reactions).map(([emoji, ids]: any) => (
-            ids.length > 0 && (
+            Array.isArray(ids) && ids.length > 0 && (
               <div key={emoji} onClick={() => handleReact(c.id, emoji)} style={{ background: hasReacted(emoji) ? "#00f2fe20" : "#1a1a1a", borderRadius: "10px", padding: "2px 8px", fontSize: "11px", color: hasReacted(emoji) ? "#00f2fe" : "#555", border: "1px solid", borderColor: hasReacted(emoji) ? "#00f2fe" : "#333", cursor: "pointer" }}>
                 {emoji} {ids.length}
               </div>
@@ -177,6 +172,16 @@ function PainelAcoes({ postId, open, onClose }: any) {
           <button onClick={() => setShowEmojiPicker(showEmojiPicker === c.id ? null : c.id)} style={styles.miniBtn}>INTERAGIR +</button>
           <button onClick={() => { setReplyTarget({id: c.id, name: "membro"}); inputRef.current?.focus(); }} style={styles.textBtn}>RESPONDER</button>
         </div>
+
+        {/* SELETOR DE EMOJIS */}
+        {showEmojiPicker === c.id && (
+          <div style={{ display: 'flex', gap: '12px', background: '#111', padding: '10px', borderRadius: '15px', marginTop: '10px', border: '1px solid #333', width: 'fit-content', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+            {['❤️', '🔥', '👏', '😂', '😮'].map(emoji => (
+              <span key={emoji} onClick={() => { handleReact(c.id, emoji); setShowEmojiPicker(null); }} style={{ fontSize: '20px', cursor: 'pointer' }}>{emoji}</span>
+            ))}
+          </div>
+        )}
+
         {replies.map(reply => renderComment(reply, true))}
       </div>
     );
@@ -194,7 +199,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
             </div>
             
             <div style={styles.inputArea}>
-              {replyTarget && <div style={styles.replyLabel}>Respondendo a @{replyTarget.name} <span onClick={() => setReplyTarget(null)}>✕</span></div>}
+              {replyTarget && <div style={styles.replyLabel}>Respondendo a @{replyTarget.name} <span onClick={() => setReplyTarget(null)} style={{cursor:'pointer', fontWeight:'bold'}}>✕</span></div>}
               <div style={styles.inputWrapper}>
                 <input ref={inputRef} placeholder="Escreva algo..." value={textComment} onChange={(e) => setTextComment(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} style={styles.textInput} />
                 <button onClick={() => handleSend()} disabled={isSending} style={styles.sendBtn}>{isSending ? "..." : "ENVIAR"}</button>
@@ -209,6 +214,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
                     <span style={{ fontSize: "26px" }}>🎙️</span>
                   </motion.button>
                 </div>
+                <div style={{fontSize: '10px', color: '#555', marginTop: '5px'}}>SEGURE PARA GRAVAR ÁUDIO</div>
               </div>
             </div>
           </motion.div>
@@ -218,7 +224,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
   );
 }
 
-// --- PÁGINA PRINCIPAL ---
+// O RESTO DO SEU DASHBOARDPAGE CONTINUA IGUAL ABAIXO...
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -320,7 +326,6 @@ export default function DashboardPage() {
   );
 }
 
-// --- ESTILOS REVISADOS ---
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
   header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(10px)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
@@ -346,10 +351,8 @@ const styles: Record<string, React.CSSProperties> = {
   listenBtn: { width: "100%", background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 10, padding: "14px", fontWeight: "bold", fontSize: 11, cursor: "pointer" },
   bottomNav: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#000", borderTop: "1px solid #111", display: "flex", justifyContent: "space-around", padding: "15px", zIndex: 100, fontSize: "20px" },
   plusBtn: { fontSize: "28px", background: "#fff", borderRadius: "8px", color: "#000", padding: "0 6px" },
-  
-  // Estilos do Painel de Ações
   overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 10000, backdropFilter: "blur(12px)" },
-  sheet: { position: "fixed", bottom: 0, left: "50%", x: "-50%", height: "85vh", width: "100%", maxWidth: "500px", backgroundColor: "#050505", borderRadius: "40px 40px 0 0", zIndex: 10001, display: "flex", flexDirection: "column", borderTop: "1px solid #333" },
+  sheet: { position: "fixed", bottom: 0, left: "50%", transform: "translateX(-50%)", height: "85vh", width: "100%", maxWidth: "500px", backgroundColor: "#050505", borderRadius: "40px 40px 0 0", zIndex: 10001, display: "flex", flexDirection: "column", borderTop: "1px solid #333" },
   dragHandle: { width: 40, height: 4, background: "#222", borderRadius: 10, margin: "15px auto" },
   inputArea: { borderTop: "1px solid #1a1a1a", padding: "20px", background: "#050505" },
   replyLabel: { fontSize: "11px", color: "#00f2fe", marginBottom: "8px", display: "flex", justifyContent: "space-between" },
