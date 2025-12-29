@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// 🎯 USANDO CAMINHO RELATIVO DIRETO PARA MATAR O CACHE
+// 🎯 IMPORT FORÇADO: Caminho relativo direto para ignorar alias/cache
 import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
 const formatTime = (date: string) => {
@@ -72,8 +72,8 @@ export default function DashboardPage() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-             {/* 🎯 TÍTULO ALTERADO PARA TESTAR O DEPLOY */}
-            <h1 style={{fontSize: '14px', color: '#00f2fe'}}>OUVI DASHBOARD V12</h1>
+             {/* 🎯 MARCADOR VISUAL DE DEPLOY BEM SUCEDIDO */}
+            <h1 style={{fontSize: '14px', color: '#00f2fe', letterSpacing: '2px'}}>OUVI DASHBOARD V12</h1>
           </div>
           <div style={styles.headerRight}>
              <button onClick={() => window.location.reload()} style={styles.logoutBtn}>SAIR</button>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
                 style={styles.listenBtn} 
                 onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
               >
-                🎙️ OUVIR RESSONÂNCIAS (400px)
+                🎙️ OUVIR RESSONÂNCIAS (V12-400PX)
               </button>
             </div>
 
@@ -124,6 +124,7 @@ export default function DashboardPage() {
         ))}
       </main>
 
+      {/* COMPONENTE CHAMADO COM O NOVO IMPORT RELATIVO */}
       <AudioThreadDrawer 
         postId={activePostId || ""} 
         open={openThread} 
