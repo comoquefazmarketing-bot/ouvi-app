@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// 🎯 IMPORT FORÇADO: Caminho relativo direto para ignorar alias/cache
-import AudioThreadDrawer from "../../components/AudioThreadDrawer";
+// Mude para o novo nome do arquivo:
+import AudioThreadDrawer from "../../components/AudioDrawerAnimado";
 
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
