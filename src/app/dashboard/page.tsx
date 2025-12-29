@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// Mude para o novo nome do arquivo:
-import AudioThreadDrawer from "../../components/AudioDrawerAnimado";
+// 🎯 Importando o novo componente para garantir que as mudanças na gaveta apareçam
+import AudioThreadDrawer from "../../components/InstaDrawer";
 
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
@@ -72,8 +72,8 @@ export default function DashboardPage() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-             {/* 🎯 MARCADOR VISUAL DE DEPLOY BEM SUCEDIDO */}
-            <h1 style={{fontSize: '14px', color: '#00f2fe', letterSpacing: '2px'}}>OUVI DASHBOARD V12</h1>
+            {/* Cabeçalho do App com cor sólida e limpa */}
+            <h1 style={{fontSize: '14px', color: '#fff', letterSpacing: '2px', fontWeight: 'bold'}}>OUVI V16</h1>
           </div>
           <div style={styles.headerRight}>
              <button onClick={() => window.location.reload()} style={styles.logoutBtn}>SAIR</button>
@@ -98,12 +98,17 @@ export default function DashboardPage() {
 
         {!loading && posts.map((post) => (
           <article key={post.id} style={styles.card}>
+            {/* 🎯 Cabeçalho do Post Atualizado (Avatar + Nome + Info) */}
             <div style={styles.cardHeader}>
-              <div style={{width: 40, height: 40, borderRadius: '50%', backgroundColor: '#333'}} />
+              <div style={{width: 40, height: 40, borderRadius: '50%', backgroundColor: '#222', overflow: 'hidden'}}>
+                <img src={`https://github.com/identicons/${post.user_id}.png`} style={{width: '100%'}} alt="avatar" />
+              </div>
               <div>
                 <div style={styles.username}>@{post.user_email?.split('@')[0] || 'membro'}</div>
-                <div style={styles.meta}>{formatTime(post.created_at)}</div>
+                <div style={styles.meta}>{formatTime(post.created_at)} • {post.location || 'Brasil'}</div>
               </div>
+              {/* Botão de curtir discreto no cabeçalho ou lateral */}
+              <div style={{marginLeft: 'auto', fontSize: '12px', color: '#666'}}>❤️ 24</div>
             </div>
 
             {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
@@ -113,7 +118,14 @@ export default function DashboardPage() {
                 style={styles.listenBtn} 
                 onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
               >
-                🎙️ OUVIR RESSONÂNCIAS (V12-400PX)
+                🎙️ OUVIR RESSONÂNCIAS
+              </button>
+              {/* Microfone Black Piano pequeno ao lado do botão principal */}
+              <button 
+                style={styles.miniMicBtn}
+                onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
+              >
+                🎤
               </button>
             </div>
 
@@ -124,7 +136,6 @@ export default function DashboardPage() {
         ))}
       </main>
 
-      {/* COMPONENTE CHAMADO COM O NOVO IMPORT RELATIVO */}
       <AudioThreadDrawer 
         postId={activePostId || ""} 
         open={openThread} 
@@ -154,5 +165,11 @@ const styles: Record<string, React.CSSProperties> = {
   postImg: { width: "100%", height: "auto", display: "block" },
   actions: { display: "flex", alignItems: "center", gap: 12, padding: "15px" },
   listenBtn: { flex: 1, background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 15, padding: "12px", fontWeight: "bold", fontSize: 11, letterSpacing: 1, cursor: "pointer" },
+  miniMicBtn: { 
+    width: '45px', height: '45px', borderRadius: '50%', 
+    background: 'linear-gradient(145deg, #222, #000)', 
+    border: '1px solid #333', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    boxShadow: '0 4px 10px rgba(0,0,0,0.5)', cursor: 'pointer'
+  },
   caption: { padding: "0 15px 20px", fontSize: 14, lineHeight: 1.5 },
 };
