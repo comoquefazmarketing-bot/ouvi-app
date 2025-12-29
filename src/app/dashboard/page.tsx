@@ -2,9 +2,13 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// 🚨 CORREÇÃO DE IMPORT: Ajustado para o caminho real visto no seu GitHub
+// Importação ajustada para o caminho real src/components/AudioThreadDrawer.tsx
 import AudioThreadDrawer from "../components/AudioThreadDrawer";
 
+/**
+ * 🕒 Função de Formatação de Tempo
+ * Calcula a diferença entre a criação do post e o momento atual.
+ */
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -16,6 +20,7 @@ const formatTime = (date: string) => {
 };
 
 export default function DashboardPage() {
+  // --- Estados do Sistema ---
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePostId, setActivePostId] = useState<string | null>(null);
@@ -24,18 +29,22 @@ export default function DashboardPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Ciclo de Vida ---
   useEffect(() => {
     fetchPosts();
   }, []);
 
+  // --- Funções de Dados ---
   async function fetchPosts() {
-    // 🎯 Buscando as colunas exatas que vi no seu Supabase (image_1ade1c)
+    // Busca as colunas mapeadas no Supabase: content, image_url, user_email
     const { data, error } = await supabase
       .from("posts")
       .select("*")
       .order("created_at", { ascending: false });
 
-    if (!error) setPosts(data || []);
+    if (!error) {
+      setPosts(data || []);
+    }
     setLoading(false);
   }
 
@@ -60,7 +69,7 @@ export default function DashboardPage() {
 
       setNewPost("");
       setSelectedImage(null);
-      fetchPosts();
+      fetchPosts(); // Recarrega o feed após postar
     } catch (err) {
       console.error("Erro ao publicar:", err);
     }
@@ -68,11 +77,16 @@ export default function DashboardPage() {
 
   return (
     <div style={styles.page}>
+      {/* 🛡️ CABEÇALHO */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-            <div style={styles.logoCircle}><div style={{width: 14, height: 14, background: '#fff', borderRadius: '50%'}} /></div>
-            <div style={styles.searchBar}><input type="text" placeholder="Pesquisar..." style={styles.searchInput} /></div>
+            <div style={styles.logoCircle}>
+              <div style={{width: 14, height: 14, background: '#fff', borderRadius: '50%'}} />
+            </div>
+            <div style={styles.searchBar}>
+              <input type="text" placeholder="Pesquisar..." style={styles.searchInput} />
+            </div>
           </div>
           <div style={styles.headerRight}>
              <span style={styles.headerUserName}>COMO</span>
@@ -82,9 +96,17 @@ export default function DashboardPage() {
       </header>
 
       <main style={styles.feed}>
+        {/* CARD DE POSTAGEM */}
         <div style={styles.createCard}>
            <div style={styles.createHeader}>
-              <div style={{width: 35, height: 35, borderRadius: '50%', backgroundColor: '#222'}} />
+              <div style={{
+                width: 35, 
+                height: 35, 
+                borderRadius: '50%', 
+                backgroundColor: '#222', 
+                backgroundImage: 'url(https://github.com/identicons/felipe.png)',
+                backgroundSize: 'cover'
+              }} />
               <span style={styles.username}>Como Que Faz Felipe Makarios</span>
            </div>
            <textarea 
@@ -100,7 +122,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* FEED RENDERIZADO DIRETAMENTE DO SUPABASE (image_1ade7e) */}
+        {/* FEED DE LOGS (image_2900a3) */}
         {!loading && posts.map((post) => (
           <article key={post.id} style={styles.card}>
             <div style={styles.cardHeader}>
@@ -131,6 +153,7 @@ export default function DashboardPage() {
         ))}
       </main>
 
+      {/* COMPONENTE DE ÁUDIO (DRAWER) */}
       {openThread && activePostId && (
         <AudioThreadDrawer 
           postId={activePostId} 
@@ -142,6 +165,7 @@ export default function DashboardPage() {
   );
 }
 
+// --- Estilização ---
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
   header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
