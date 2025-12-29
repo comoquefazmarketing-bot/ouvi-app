@@ -4,76 +4,212 @@ import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 
-// --- PAINEL DE AÇÕES (GAVETA ESTILO INSTAGRAM) ---
+// --- PAINEL DE INTERAÇÃO (COMENTÁRIOS E ÁUDIOS) ---
 function PainelAcoes({ postId, open, onClose }: any) {
   const [comments, setComments] = useState<any[]>([]);
+  const [textComment, setTextComment] = useState("");
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
+  const [replyTarget, setReplyTarget] = useState<{ id: string, name: string } | null>(null);
+  const [user, setUser] = useState<any>(null);
 
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const MAX_TIME = 30;
+
+  // Busca sessão do usuário e comentários
   useEffect(() => {
     if (open && postId) {
-      supabase.from("audio_comments").select("*").eq("post_id", postId)
-        .then(({ data }) => setComments(data || []));
+      const checkUser = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        setUser(session?.user || null);
+      };
+      checkUser();
+      fetchComments();
+
+      // Realtime: Atualiza a lista sempre que houver novo comentário
+      const channel = supabase.channel(`room_${postId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'audio_comments' }, () => {
+          fetchComments();
+        })
+        .subscribe();
+
+      return () => { supabase.removeChannel(channel); };
     }
   }, [open, postId]);
+
+  // Lógica do cronômetro de gravação
+  useEffect(() => {
+    if (isRecording) {
+      timerRef.current = setInterval(() => {
+        setRecordingTime((prev) => {
+          if (prev >= MAX_TIME) { stopRecording(); return MAX_TIME; }
+          return prev + 0.1;
+        });
+      }, 100);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setRecordingTime(0);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isRecording]);
+
+  async function fetchComments() {
+    const { data, error } = await supabase
+      .from("audio_comments")
+      .select("*")
+      .eq("post_id", postId)
+      .order("created_at", { ascending: true });
+    
+    if (!error) setComments(data || []);
+  }
+
+  async function handleReact(commentId: string, emoji: string) {
+    if (!user) return alert("Faça login para interagir!");
+    const comment = comments.find(c => c.id === commentId);
+    if (!comment) return;
+
+    const currentReactions = comment.reactions || {};
+    const userList = Array.isArray(currentReactions[emoji]) ? currentReactions[emoji] : [];
+
+    let newUserList = userList.includes(user.id) 
+      ? userList.filter((id: string) => id !== user.id) 
+      : [...userList, user.id];
+
+    const newReactions = { ...currentReactions, [emoji]: newUserList };
+
+    // Update Otimista (Interface responde na hora)
+    setComments(prev => prev.map(c => c.id === commentId ? { ...c, reactions: newReactions } : c));
+
+    await supabase.from("audio_comments").update({ reactions: newReactions }).eq("id", commentId);
+  }
+
+  async function handleSend(audioUrl: string | null = null) {
+    if (!textComment.trim() && !audioUrl) return;
+    if (!user) return alert("Você precisa estar logado!");
+    
+    setIsSending(true);
+
+    const { error } = await supabase.from("audio_comments").insert([{
+      post_id: postId,
+      parent_id: replyTarget?.id || null,
+      content: audioUrl ? null : textComment,
+      audio_url: audioUrl,
+      user_id: user.id, // ID DINÂMICO DA SESSÃO
+      reactions: {}
+    }]);
+
+    if (!error) {
+      setTextComment("");
+      setReplyTarget(null);
+      fetchComments();
+    } else {
+      console.error("Erro no envio:", error.message);
+    }
+    setIsSending(false);
+  }
+
+  async function startRecording(e: any) {
+    e.preventDefault();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (ev) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (audioBlob.size > 2000) await uploadAudio(audioBlob);
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      const stopHandler = () => { stopRecording(); window.removeEventListener("mouseup", stopHandler); window.removeEventListener("touchend", stopHandler); };
+      window.addEventListener("mouseup", stopHandler);
+      window.addEventListener("touchend", stopHandler);
+    } catch (err) { console.error("Mic bloqueado"); }
+  }
+
+  function stopRecording() {
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    setIsRecording(false);
+  }
+
+  async function uploadAudio(blob: Blob) {
+    const fileName = `audio_${Date.now()}.webm`;
+    const { error } = await supabase.storage.from("audio-comments").upload(`audios/${fileName}`, blob);
+    
+    if (!error) {
+      const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(`audios/${fileName}`);
+      await handleSend(publicUrl);
+    }
+  }
+
+  const renderComment = (c: any, isReply = false) => {
+    const isPlaying = playingId === c.id;
+    const replies = comments.filter(r => r.parent_id === c.id);
+    const hasReacted = (emoji: string) => user && c.reactions?.[emoji]?.includes(user.id);
+
+    return (
+      <div key={c.id} style={{ marginBottom: "20px", marginLeft: isReply ? "30px" : "0", borderLeft: isReply ? "1px solid #222" : "none", paddingLeft: isReply ? "15px" : "0" }}>
+        <motion.div animate={isPlaying ? { scale: 0.98, borderColor: "#00f2fe" } : { scale: 1, borderColor: "#1a1a1a" }}
+          style={{ background: isPlaying ? "rgba(0,242,254,0.1)" : "#111", padding: "12px", borderRadius: "20px", border: "1px solid", position: "relative" }}>
+          <div style={{ color: "#00f2fe", fontSize: "9px", fontWeight: "bold", marginBottom: "4px" }}>@MEMBRO</div>
+          {c.audio_url ? <audio onPlay={() => setPlayingId(c.id)} onPause={() => setPlayingId(null)} controls src={c.audio_url} style={{ width: "100%", height: "30px" }} /> 
+                       : <p style={{ margin: 0, fontSize: "14px", color: "#ccc" }}>{c.content}</p>}
+        </motion.div>
+        
+        <div style={{ display: "flex", gap: "10px", marginTop: "8px", alignItems: "center", flexWrap: "wrap" }}>
+          {c.reactions && Object.entries(c.reactions).map(([emoji, ids]: any) => (
+            ids.length > 0 && (
+              <div key={emoji} onClick={() => handleReact(c.id, emoji)} style={{ background: hasReacted(emoji) ? "#00f2fe20" : "#1a1a1a", borderRadius: "10px", padding: "2px 8px", fontSize: "11px", color: hasReacted(emoji) ? "#00f2fe" : "#555", border: "1px solid", borderColor: hasReacted(emoji) ? "#00f2fe" : "#333", cursor: "pointer" }}>
+                {emoji} {ids.length}
+              </div>
+            )
+          ))}
+          <button onClick={() => setShowEmojiPicker(showEmojiPicker === c.id ? null : c.id)} style={styles.miniBtn}>INTERAGIR +</button>
+          <button onClick={() => { setReplyTarget({id: c.id, name: "membro"}); inputRef.current?.focus(); }} style={styles.textBtn}>RESPONDER</button>
+        </div>
+        {replies.map(reply => renderComment(reply, true))}
+      </div>
+    );
+  };
 
   return (
     <AnimatePresence>
       {open && (
         <>
-          {/* Overlay Escuro com Blur */}
-          <motion.div 
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            onClick={onClose}
-            style={{ 
-              position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", 
-              zIndex: 10000, backdropFilter: "blur(6px)" 
-            }} 
-          />
-          
-          {/* Gaveta que SOBE */}
-          <motion.div 
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 200 }}
-            style={{
-              position: "fixed", bottom: 0, left: "50%", x: "-50%",
-              height: "80vh", width: "100%", maxWidth: "500px",
-              backgroundColor: "#050505", borderTop: "1px solid #222",
-              borderRadius: "30px 30px 0 0", zIndex: 10001,
-              display: "flex", flexDirection: "column", padding: "20px"
-            }}
-          >
-            <div style={{ width: 45, height: 5, background: "#333", borderRadius: 10, margin: "0 auto 20px" }} />
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={styles.overlay} />
+          <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} style={styles.sheet}>
+            <div style={styles.dragHandle} />
+            <div style={{ flex: 1, overflowY: "auto", padding: "0 20px" }}>
+              {comments.filter(c => !c.parent_id).map(c => renderComment(c))}
+            </div>
             
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 25 }}>
-              <span style={{ color: "#fff", fontWeight: "bold", fontSize: "18px", letterSpacing: "1px" }}>RESSONÂNCIAS</span>
-              <button onClick={onClose} style={{ background: "#222", border: "none", color: "#fff", width: 30, height: 30, borderRadius: "50%", cursor: "pointer" }}>✕</button>
-            </div>
-
-            <div style={{ flex: 1, overflowY: "auto", paddingRight: "5px" }}>
-              {comments.length === 0 && <div style={{ textAlign: 'center', color: '#444', marginTop: 40 }}>Nenhum áudio ainda...</div>}
-              {comments.map((c: any) => (
-                <div key={c.id} style={{ background: "#111", padding: "15px", borderRadius: "20px", marginBottom: "15px", border: "1px solid #1a1a1a" }}>
-                  <div style={{ color: "#00f2fe", fontSize: "11px", fontWeight: "bold", marginBottom: "10px" }}>@membro</div>
-                  <audio controls src={c.audio_url} style={{ width: "100%", height: "38px", filter: "invert(1)" }} />
+            <div style={styles.inputArea}>
+              {replyTarget && <div style={styles.replyLabel}>Respondendo a @{replyTarget.name} <span onClick={() => setReplyTarget(null)}>✕</span></div>}
+              <div style={styles.inputWrapper}>
+                <input ref={inputRef} placeholder="Escreva algo..." value={textComment} onChange={(e) => setTextComment(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleSend()} style={styles.textInput} />
+                <button onClick={() => handleSend()} disabled={isSending} style={styles.sendBtn}>{isSending ? "..." : "ENVIAR"}</button>
+              </div>
+              <div style={styles.micContainer}>
+                <div style={styles.micRing}>
+                  <svg style={styles.svgRing}>
+                    <circle cx="40" cy="40" r="36" stroke="#222" strokeWidth="4" fill="none" />
+                    {isRecording && <motion.circle cx="40" cy="40" r="36" stroke={recordingTime > 25 ? "#ff3040" : "#00f2fe"} strokeWidth="4" fill="none" strokeDasharray="226" strokeDashoffset={226 - (226 * recordingTime) / MAX_TIME} />}
+                  </svg>
+                  <motion.button onMouseDown={startRecording} onTouchStart={startRecording} animate={isRecording ? { scale: 0.9, backgroundColor: "#ff3040" } : { scale: 1, backgroundColor: "#1a1a1a" }} style={styles.micBtn}>
+                    <span style={{ fontSize: "26px" }}>🎙️</span>
+                  </motion.button>
                 </div>
-              ))}
-            </div>
-
-            {/* BOTÃO MASTER DE GRAVAÇÃO: BLACK PIANO */}
-            <div style={{ padding: "30px 0", display: "flex", flexDirection: "column", alignItems: "center", borderTop: "1px solid #111" }}>
-               <button style={{
-                  width: "85px", height: "85px", borderRadius: "50%",
-                  background: "linear-gradient(145deg, #222, #000)",
-                  border: "2px solid #333", cursor: "pointer",
-                  boxShadow: "0 15px 35px rgba(0,0,0,0.8), inset 0 2px 5px rgba(255,255,255,0.1)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  transition: "transform 0.2s"
-                }}
-                onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.92)"}
-                onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
-                >
-                  <span style={{ fontSize: "35px" }}>🎙️</span>
-                </button>
-                <span style={{ color: "#444", fontSize: "10px", marginTop: "15px", fontWeight: "bold", letterSpacing: "2px" }}>SEGURE PARA FALAR</span>
+              </div>
             </div>
           </motion.div>
         </>
@@ -82,7 +218,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
   );
 }
 
-// --- DASHBOARD PRINCIPAL ---
+// --- PÁGINA PRINCIPAL ---
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,144 +231,135 @@ export default function DashboardPage() {
   useEffect(() => { fetchPosts(); }, []);
 
   async function fetchPosts() {
-    const { data, error } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
-    if (!error) setPosts(data || []);
+    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
+    setPosts(data || []);
     setLoading(false);
   }
 
   async function handleCreatePost() {
-    const REAL_USER_ID = "0c8314cc-2731-4bf2-99a1-d8cd2725d77f";
     if (!newPost.trim() && !selectedImage) return;
-    try {
-      let imageUrl = null;
-      if (selectedImage) {
-        const fileName = `${Date.now()}`;
-        await supabase.storage.from("post-images").upload(`photos/${fileName}`, selectedImage);
-        imageUrl = supabase.storage.from("post-images").getPublicUrl(`photos/${fileName}`).data.publicUrl;
-      }
-      await supabase.from("posts").insert([{ 
-        content: newPost, 
-        image_url: imageUrl, 
-        user_id: REAL_USER_ID, 
-        user_email: "felipe@ouvi.app" 
-      }]);
-      setNewPost(""); setSelectedImage(null); fetchPosts();
-    } catch (err) { console.error(err); }
-  }
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return alert("Logue para postar!");
 
-  const formatTime = (date: string) => {
-    const diff = new Date().getTime() - new Date(date).getTime();
-    const minutes = Math.floor(diff / 60000);
-    if (minutes < 1) return "agora";
-    if (minutes < 60) return `há ${minutes}min`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `há ${hours}h`;
-    return new Date(date).toLocaleDateString();
-  };
+    let imageUrl = null;
+    if (selectedImage) {
+      const fileName = `${Date.now()}`;
+      const { error: upError } = await supabase.storage.from("post-images").upload(`photos/${fileName}`, selectedImage);
+      if (!upError) imageUrl = supabase.storage.from("post-images").getPublicUrl(`photos/${fileName}`).data.publicUrl;
+    }
+
+    await supabase.from("posts").insert([{ 
+      content: newPost, 
+      image_url: imageUrl, 
+      user_id: session.user.id, 
+      user_email: session.user.email 
+    }]);
+    
+    setNewPost(""); setSelectedImage(null); fetchPosts();
+  }
 
   return (
     <div style={styles.page}>
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <h1 style={styles.logo}>OUVI</h1>
-          <button onClick={() => window.location.reload()} style={styles.logoutBtn}>SAIR</button>
+          <button onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} style={styles.logoutBtn}>SAIR</button>
         </div>
       </header>
 
       <main style={styles.feed}>
-        {/* ÁREA DE POSTAGEM COMPLETA */}
         <div style={styles.createCard}>
-           <textarea 
-            placeholder="No que você está pensando, Felipe?" 
-            value={newPost} onChange={(e) => setNewPost(e.target.value)}
-            style={styles.createInput}
-          />
+          <textarea placeholder="No que você está pensando?" value={newPost} onChange={(e) => setNewPost(e.target.value)} style={styles.createInput} />
           <div style={styles.createActions}>
-            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Adicionar Foto</button>
+            <button onClick={() => fileInputRef.current?.click()} style={styles.mediaBtn}>🖼️ Foto</button>
             <input type="file" ref={fileInputRef} hidden accept="image/*" onChange={(e) => setSelectedImage(e.target.files?.[0] || null)} />
             <button onClick={handleCreatePost} style={styles.publishBtn}>Publicar</button>
           </div>
-          {selectedImage && <div style={{ fontSize: 10, color: '#00f2fe', marginTop: 10 }}>✓ Imagem selecionada</div>}
         </div>
 
-        {/* LISTA DE POSTS */}
         {!loading && posts.map((post) => (
           <article key={post.id} style={styles.card}>
-            {/* CABEÇALHO DO POST COM AVATAR */}
             <div style={styles.cardHeader}>
-              <div style={styles.avatar}>
-                <img src={`https://github.com/identicons/${post.user_id}.png`} style={{ width: '100%' }} alt="avatar" />
+              <div style={styles.avatarWrapper}>
+                <div style={styles.avatarInner}>
+                   <img src={`https://github.com/identicons/${post.user_id}.png`} alt="" style={{ width: '100%' }} />
+                </div>
               </div>
               <div style={{ flex: 1 }}>
                 <div style={styles.username}>@{post.user_email?.split('@')[0]}</div>
-                <div style={styles.meta}>{formatTime(post.created_at)}</div>
+                <div style={styles.meta}>Brasil</div>
               </div>
-              <div style={styles.heart}>❤️ 24</div>
             </div>
 
             {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
 
-            {/* BOTÕES DE AÇÃO: NEON + STUDIO MIC */}
-            <div style={styles.actions}>
-              <button 
-                onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
-                style={styles.listenBtn}
-              >
-                ESCUTAR ÁUDIOS
-              </button>
-              <button 
-                onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
-                style={styles.studioMicBtn}
-              >
-                🎙️
-              </button>
+            <div style={styles.socialBar}>
+               <span style={{ cursor: 'pointer' }}>🤍</span>
+               <span style={{ cursor: 'pointer' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>💬</span>
+               <span style={{ cursor: 'pointer', fontSize: '26px' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️</span>
             </div>
 
-            <div style={styles.caption}>
-              <strong>@{post.user_email?.split('@')[0]}</strong> {post.content}
+            <div style={styles.captionArea}>
+              <p style={{ margin: 0, fontSize: 14 }}>
+                <span style={{ fontWeight: "bold", marginRight: 8 }}>@{post.user_email?.split('@')[0]}</span>
+                {post.content}
+              </p>
+            </div>
+
+            <div style={styles.actionPadding}>
+              <button onClick={() => { setActivePostId(post.id); setOpenThread(true); }} style={styles.listenBtn}>O QUE ESTÃO FALANDO</button>
             </div>
           </article>
         ))}
       </main>
 
-      {/* GAVETA QUE SOBE */}
-      <PainelAcoes 
-        postId={activePostId || ""} 
-        open={openThread} 
-        onClose={() => { setOpenThread(false); setActivePostId(null); }} 
-      />
+      <nav style={styles.bottomNav}><span>🏠</span><span>🔍</span><span style={styles.plusBtn}>+</span><span>🎬</span><span>👤</span></nav>
+      
+      <PainelAcoes postId={activePostId || ""} open={openThread} onClose={() => { setOpenThread(false); setActivePostId(null); }} />
     </div>
   );
 }
 
-// --- ESTILOS V12 + REFINAMENTOS ---
+// --- ESTILOS REVISADOS ---
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
-  header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
-  headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", padding: "18px", alignItems: "center" },
-  logo: { fontSize: '16px', color: '#fff', letterSpacing: '3px', fontWeight: 'bold' },
+  header: { position: "sticky", top: 0, zIndex: 10, background: "rgba(0,0,0,0.8)", backdropFilter: "blur(10px)", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
+  headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", padding: "12px 20px", alignItems: "center" },
+  logo: { fontSize: '18px', fontWeight: '900', letterSpacing: '2px' },
   logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: "11px", fontWeight: "bold", cursor: "pointer" },
-  feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 28, padding: "20px 0" },
-  createCard: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 25, border: "1px solid #151515", padding: 20 },
-  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 16, minHeight: 70 },
-  createActions: { display: "flex", justifyContent: "space-between", marginTop: 15, paddingTop: 15, borderTop: "1px solid #111" },
-  mediaBtn: { background: "#111", border: "none", color: "#aaa", padding: "10px 18px", borderRadius: 12, fontSize: 12, cursor: "pointer" },
-  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "10px 28px", borderRadius: 12, fontSize: 12, fontWeight: "bold", cursor: "pointer" },
-  card: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 28, border: "1px solid #151515", overflow: "hidden" },
-  cardHeader: { display: "flex", gap: 14, padding: "18px", alignItems: "center" },
-  avatar: { width: 38, height: 38, borderRadius: '50%', backgroundColor: '#222', overflow: 'hidden', border: '1px solid #333' },
-  username: { fontWeight: 700, fontSize: 14, color: '#eee' },
-  meta: { fontSize: 11, color: '#555', marginTop: 2 },
-  heart: { fontSize: '13px', color: '#333' },
-  postImg: { width: "100%", display: "block", maxHeight: "500px", objectFit: "cover" },
-  actions: { display: "flex", alignItems: "center", gap: 14, padding: "18px" },
-  listenBtn: { flex: 1, background: "rgba(0,242,254,0.06)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 18, padding: "14px", fontWeight: "bold", fontSize: 11, letterSpacing: "1px", cursor: "pointer" },
-  studioMicBtn: { 
-    width: 52, height: 52, borderRadius: "50%", 
-    background: "linear-gradient(145deg, #1a1a1a, #000)", 
-    border: "1px solid #333", cursor: "pointer", 
-    display: "flex", alignItems: "center", justifyContent: "center",
-    boxShadow: "0 6px 15px rgba(0,0,0,0.4)"
-  },
-  caption: { padding: "0 18px 22px", fontSize: 14, lineHeight: "1.6", color: "#ccc" },
+  feed: { display: "flex", flexDirection: "column", alignItems: "center", paddingBottom: "100px" },
+  createCard: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 20, border: "1px solid #151515", padding: 15, margin: "20px 0" },
+  createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 50 },
+  createActions: { display: "flex", justifyContent: "space-between", marginTop: 10 },
+  mediaBtn: { background: "#111", border: "none", color: "#aaa", padding: "8px 15px", borderRadius: 10, fontSize: 12, cursor: "pointer" },
+  publishBtn: { background: "#fff", border: "none", color: "#000", padding: "8px 20px", borderRadius: 10, fontSize: 12, fontWeight: "bold", cursor: "pointer" },
+  card: { width: "100%", maxWidth: 500, borderBottom: "1px solid #111", paddingBottom: 20 },
+  cardHeader: { display: "flex", gap: 12, padding: "12px 15px", alignItems: "center" },
+  avatarWrapper: { padding: "2px", borderRadius: "50%", background: "linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888)" },
+  avatarInner: { width: 32, height: 32, borderRadius: '50%', backgroundColor: '#000', border: '2px solid #000', overflow: 'hidden' },
+  username: { fontWeight: 700, fontSize: 13 },
+  meta: { fontSize: 10, color: '#444' },
+  postImg: { width: "100%", aspectRatio: "1/1", objectFit: "cover" },
+  socialBar: { display: "flex", gap: 20, padding: "12px 15px 8px", fontSize: "24px", alignItems: 'center' },
+  captionArea: { padding: "0 15px 10px" },
+  actionPadding: { padding: "0 15px" },
+  listenBtn: { width: "100%", background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 10, padding: "14px", fontWeight: "bold", fontSize: 11, cursor: "pointer" },
+  bottomNav: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#000", borderTop: "1px solid #111", display: "flex", justifyContent: "space-around", padding: "15px", zIndex: 100, fontSize: "20px" },
+  plusBtn: { fontSize: "28px", background: "#fff", borderRadius: "8px", color: "#000", padding: "0 6px" },
+  
+  // Estilos do Painel de Ações
+  overlay: { position: "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 10000, backdropFilter: "blur(12px)" },
+  sheet: { position: "fixed", bottom: 0, left: "50%", x: "-50%", height: "85vh", width: "100%", maxWidth: "500px", backgroundColor: "#050505", borderRadius: "40px 40px 0 0", zIndex: 10001, display: "flex", flexDirection: "column", borderTop: "1px solid #333" },
+  dragHandle: { width: 40, height: 4, background: "#222", borderRadius: 10, margin: "15px auto" },
+  inputArea: { borderTop: "1px solid #1a1a1a", padding: "20px", background: "#050505" },
+  replyLabel: { fontSize: "11px", color: "#00f2fe", marginBottom: "8px", display: "flex", justifyContent: "space-between" },
+  inputWrapper: { display: "flex", gap: "10px", background: "#111", padding: "12px 20px", borderRadius: "30px", border: "1px solid #222", marginBottom: "15px" },
+  textInput: { flex: 1, background: "none", border: "none", color: "#fff", outline: "none" },
+  sendBtn: { background: "none", border: "none", color: "#00f2fe", fontWeight: "bold", cursor: "pointer" },
+  micContainer: { display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" },
+  micRing: { position: "relative", width: 80, height: 80, display: "flex", alignItems: "center", justifyContent: "center" },
+  svgRing: { position: "absolute", transform: "rotate(-90deg)", width: "80px", height: "80px" },
+  micBtn: { width: 60, height: 60, borderRadius: "50%", border: "none", cursor: "pointer", zIndex: 1, display: "flex", alignItems: "center", justifyContent: "center" },
+  miniBtn: { background: "#00f2fe10", border: "none", color: "#00f2fe", borderRadius: "20px", padding: "4px 10px", fontSize: "10px", cursor: "pointer" },
+  textBtn: { background: "none", border: "none", color: "#555", fontSize: "10px", fontWeight: "bold", cursor: "pointer" }
 };
