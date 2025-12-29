@@ -19,15 +19,13 @@ export default function AudioThreadDrawer({ postId, open, onClose }: any) {
       <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)", zIndex: 9998 }} onClick={onClose} />
       <div style={{ 
         position: "fixed", top: 0, right: 0, height: "100vh", 
-        width: "400px", // 🎯 TRAVADO EM 400PX
-        backgroundColor: "#000033", // 🎯 AZUL PARA TESTE
-        borderLeft: "5px solid #ffff00", // 🎯 BORDA AMARELA PARA TESTE
+        width: "400px", // 🎯 LARGURA FIXA 400PX
+        backgroundColor: "#050505", 
+        borderLeft: "8px solid #ff00ff", // 🎯 BORDA MAGENTA NEON (TESTE VISUAL)
         zIndex: 9999, display: "flex", flexDirection: "column", padding: "20px"
       }}>
-        <h2 style={{ color: "#fff" }}>VERSÃO FORÇADA 5.0</h2>
-        <button onClick={onClose} style={{ color: "white", position: "absolute", top: 20, right: 20 }}>✕</button>
-        
-        <div style={{ marginTop: "40px", flex: 1, overflowY: "auto" }}>
+        <h2 style={{ color: "#00f2fe", fontSize: "14px" }}>MODO FORÇADO V8</h2>
+        <div style={{ flex: 1, overflowY: "auto", marginTop: "20px" }}>
           {comments.map((c: any) => (
             <div key={c.id} style={{ background: "#111", padding: "15px", borderRadius: "10px", marginBottom: "10px" }}>
               <audio controls src={c.audio_url} style={{ width: "100%", filter: "invert(1) brightness(2)" }} />
