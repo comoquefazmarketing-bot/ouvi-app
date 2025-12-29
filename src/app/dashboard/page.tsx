@@ -2,12 +2,9 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// 🎯 IMPORT CORRIGIDO: Usando Alias para evitar erro de caminho
-import AudioThreadDrawer from "@/components/AudioThreadDrawer";
+// 🎯 USANDO CAMINHO RELATIVO DIRETO PARA MATAR O CACHE
+import AudioThreadDrawer from "../../components/AudioThreadDrawer";
 
-/**
- * 🕒 Função de Formatação de Tempo
- */
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
   const minutes = Math.floor(diff / 60000);
@@ -75,15 +72,10 @@ export default function DashboardPage() {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
-            <div style={styles.logoCircle}>
-              <div style={{width: 14, height: 14, background: '#fff', borderRadius: '50%'}} />
-            </div>
-            <div style={styles.searchBar}>
-              <input type="text" placeholder="Pesquisar..." style={styles.searchInput} />
-            </div>
+             {/* 🎯 TÍTULO ALTERADO PARA TESTAR O DEPLOY */}
+            <h1 style={{fontSize: '14px', color: '#00f2fe'}}>OUVI DASHBOARD V12</h1>
           </div>
           <div style={styles.headerRight}>
-             <span style={styles.headerUserName}>COMO</span>
              <button onClick={() => window.location.reload()} style={styles.logoutBtn}>SAIR</button>
           </div>
         </div>
@@ -91,17 +83,6 @@ export default function DashboardPage() {
 
       <main style={styles.feed}>
         <div style={styles.createCard}>
-           <div style={styles.createHeader}>
-              <div style={{
-                width: 35, 
-                height: 35, 
-                borderRadius: '50%', 
-                backgroundColor: '#222', 
-                backgroundImage: 'url(https://github.com/identicons/felipe.png)',
-                backgroundSize: 'cover'
-              }} />
-              <span style={styles.username}>Como Que Faz Felipe Makarios</span>
-           </div>
            <textarea 
             placeholder="No que você está pensando, Felipe?" 
             value={newPost}
@@ -128,14 +109,12 @@ export default function DashboardPage() {
             {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
 
             <div style={styles.actions}>
-              <button style={styles.iconBtn}>🤍</button>
               <button 
                 style={styles.listenBtn} 
                 onClick={() => { setActivePostId(post.id); setOpenThread(true); }}
               >
-                🎙️ OUVIR RESSONÂNCIAS
+                🎙️ OUVIR RESSONÂNCIAS (400px)
               </button>
-              <button style={styles.iconBtn}>🚀</button>
             </div>
 
             <div style={styles.caption}>
@@ -145,7 +124,6 @@ export default function DashboardPage() {
         ))}
       </main>
 
-      {/* 🎯 CHAMADA OTIMIZADA: Agora o componente lida melhor com a montagem */}
       <AudioThreadDrawer 
         postId={activePostId || ""} 
         open={openThread} 
@@ -155,21 +133,15 @@ export default function DashboardPage() {
   );
 }
 
-// Estilos omitidos para brevidade (mantive os mesmos que você enviou)
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
   header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
   headerContent: { width: "100%", maxWidth: 600, display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px" },
   headerLeft: { display: "flex", alignItems: "center", gap: 15, flex: 1 },
-  logoCircle: { width: 30, height: 30, borderRadius: '50%', border: '1px solid #333', display: 'grid', placeItems: 'center' },
-  searchBar: { background: "#111", padding: "8px 15px", borderRadius: 25, flex: 0.8, border: "1px solid #222" },
-  searchInput: { background: 'none', border: 'none', color: '#fff', fontSize: 13, outline: 'none', width: '100%' },
   headerRight: { display: 'flex', alignItems: 'center', gap: 15 },
-  headerUserName: { fontSize: 10, color: '#444', fontWeight: 'bold' },
   logoutBtn: { background: "none", border: "none", color: "#ff3040", fontSize: 11, fontWeight: "bold", cursor: "pointer" },
   feed: { display: "flex", flexDirection: "column", alignItems: "center", gap: 24, padding: "20px 0" },
   createCard: { width: "95%", maxWidth: 500, background: "#080808", borderRadius: 25, border: "1px solid #151515", padding: 18 },
-  createHeader: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 15 },
   createInput: { width: "100%", background: "none", border: "none", color: "#fff", outline: "none", resize: "none", fontSize: 15, minHeight: 60 },
   createActions: { display: "flex", justifyContent: "space-between", marginTop: 15, paddingTop: 15, borderTop: "1px solid #111" },
   mediaBtn: { background: "#111", border: "none", color: "#fff", padding: "8px 16px", borderRadius: 10, fontSize: 12, cursor: "pointer" },
@@ -180,7 +152,6 @@ const styles: Record<string, React.CSSProperties> = {
   meta: { fontSize: 11, opacity: 0.5 },
   postImg: { width: "100%", height: "auto", display: "block" },
   actions: { display: "flex", alignItems: "center", gap: 12, padding: "15px" },
-  iconBtn: { background: "#121212", border: "1px solid #1a1a1a", borderRadius: 15, padding: 10, cursor: "pointer", color: "#fff" },
   listenBtn: { flex: 1, background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 15, padding: "12px", fontWeight: "bold", fontSize: 11, letterSpacing: 1, cursor: "pointer" },
   caption: { padding: "0 15px 20px", fontSize: 14, lineHeight: 1.5 },
 };
