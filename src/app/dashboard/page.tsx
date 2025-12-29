@@ -96,7 +96,7 @@ function PainelAcoes({ postId, open, onClose }: any) {
 
     const { error } = await supabase.from("audio_comments").insert([{
       post_id: postId,
-      parent_id: replyTarget?.id || null, // LIGA A RESPOSTA AO PAI
+      parent_id: replyTarget?.id || null, 
       content: audioUrl ? null : textComment,
       audio_url: audioUrl,
       user_id: session.user.id,
@@ -173,7 +173,6 @@ function PainelAcoes({ postId, open, onClose }: any) {
           <button onClick={() => { setReplyTarget({id: c.id, name: "membro"}); inputRef.current?.focus(); }} style={styles.textBtn}>RESPONDER</button>
         </div>
 
-        {/* SELETOR DE EMOJIS */}
         {showEmojiPicker === c.id && (
           <div style={{ display: 'flex', gap: '12px', background: '#111', padding: '10px', borderRadius: '15px', marginTop: '10px', border: '1px solid #333', width: 'fit-content', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
             {['❤️', '🔥', '👏', '😂', '😮'].map(emoji => (
@@ -224,9 +223,10 @@ function PainelAcoes({ postId, open, onClose }: any) {
   );
 }
 
-// O RESTO DO SEU DASHBOARDPAGE CONTINUA IGUAL ABAIXO...
+// --- DASHBOARDPAGE COM PRÉVIA DE 4 INTERAÇÕES ---
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
+  const [commentsByPost, setCommentsByPost] = useState<Record<string, any[]>>({});
   const [loading, setLoading] = useState(true);
   const [activePostId, setActivePostId] = useState<string | null>(null);
   const [openThread, setOpenThread] = useState(false);
@@ -237,8 +237,20 @@ export default function DashboardPage() {
   useEffect(() => { fetchPosts(); }, []);
 
   async function fetchPosts() {
-    const { data } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
-    setPosts(data || []);
+    const { data: postsData } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
+    if (postsData) {
+      setPosts(postsData);
+      // Busca todos os comentários para agrupar as prévias
+      const { data: comms } = await supabase.from("audio_comments").select("*").order("created_at", { ascending: true });
+      if (comms) {
+        const grouped = comms.reduce((acc: any, curr: any) => {
+          if (!acc[curr.post_id]) acc[curr.post_id] = [];
+          acc[curr.post_id].push(curr);
+          return acc;
+        }, {});
+        setCommentsByPost(grouped);
+      }
+    }
     setLoading(false);
   }
 
@@ -283,45 +295,73 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {!loading && posts.map((post) => (
-          <article key={post.id} style={styles.card}>
-            <div style={styles.cardHeader}>
-              <div style={styles.avatarWrapper}>
-                <div style={styles.avatarInner}>
-                   <img src={`https://github.com/identicons/${post.user_id}.png`} alt="" style={{ width: '100%' }} />
+        {!loading && posts.map((post) => {
+          const postComments = commentsByPost[post.id] || [];
+          // PEGA AS ÚLTIMAS 4 INTERAÇÕES PARA INSTIGAR O CLIQUE
+          const recentPreviews = postComments.slice(-4);
+
+          return (
+            <article key={post.id} style={styles.card}>
+              <div style={styles.cardHeader}>
+                <div style={styles.avatarWrapper}>
+                  <div style={styles.avatarInner}>
+                     <img src={`https://github.com/identicons/${post.user_id}.png`} alt="" style={{ width: '100%' }} />
+                  </div>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={styles.username}>@{post.user_email?.split('@')[0]}</div>
+                  <div style={styles.meta}>Brasil</div>
                 </div>
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={styles.username}>@{post.user_email?.split('@')[0]}</div>
-                <div style={styles.meta}>Brasil</div>
+
+              {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
+
+              <div style={styles.socialBar}>
+                 <span style={{ cursor: 'pointer' }}>🤍</span>
+                 <span style={{ cursor: 'pointer' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>💬</span>
+                 <span style={{ cursor: 'pointer', fontSize: '26px' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️</span>
               </div>
-            </div>
 
-            {post.image_url && <img src={post.image_url} alt="" style={styles.postImg} />}
+              <div style={styles.captionArea}>
+                <p style={{ margin: 0, fontSize: 14 }}>
+                  <span style={{ fontWeight: "bold", marginRight: 8 }}>@{post.user_email?.split('@')[0]}</span>
+                  {post.content}
+                </p>
+              </div>
 
-            <div style={styles.socialBar}>
-               <span style={{ cursor: 'pointer' }}>🤍</span>
-               <span style={{ cursor: 'pointer' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>💬</span>
-               <span style={{ cursor: 'pointer', fontSize: '26px' }} onClick={() => { setActivePostId(post.id); setOpenThread(true); }}>🎙️</span>
-            </div>
+              {/* BOX DE PRÉVIA DA THREAD (3-4 COMENTÁRIOS) */}
+              <div onClick={() => { setActivePostId(post.id); setOpenThread(true); }} style={styles.previewBox}>
+                <div style={{ color: "#444", fontSize: "10px", fontWeight: 'bold', marginBottom: "8px", textTransform: 'uppercase' }}>
+                   Conversa Ativa • {postComments.length} interações
+                </div>
+                
+                {recentPreviews.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                    {recentPreviews.map((c, idx) => (
+                      <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '8px', opacity: 0.4 + (idx * 0.2) }}>
+                        <div style={{ width: 3, height: 3, borderRadius: '50%', background: '#00f2fe' }} />
+                        <div style={{ fontSize: '11px', color: '#aaa', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {c.audio_url ? "🎤 Mensagem de áudio..." : c.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '11px', color: '#333' }}>Seja o primeiro a interagir aqui.</div>
+                )}
+              </div>
 
-            <div style={styles.captionArea}>
-              <p style={{ margin: 0, fontSize: 14 }}>
-                <span style={{ fontWeight: "bold", marginRight: 8 }}>@{post.user_email?.split('@')[0]}</span>
-                {post.content}
-              </p>
-            </div>
-
-            <div style={styles.actionPadding}>
-              <button onClick={() => { setActivePostId(post.id); setOpenThread(true); }} style={styles.listenBtn}>O QUE ESTÃO FALANDO</button>
-            </div>
-          </article>
-        ))}
+              <div style={styles.actionPadding}>
+                <button onClick={() => { setActivePostId(post.id); setOpenThread(true); }} style={styles.listenBtn}>O QUE ESTÃO FALANDO</button>
+              </div>
+            </article>
+          );
+        })}
       </main>
 
       <nav style={styles.bottomNav}><span>🏠</span><span>🔍</span><span style={styles.plusBtn}>+</span><span>🎬</span><span>👤</span></nav>
       
-      <PainelAcoes postId={activePostId || ""} open={openThread} onClose={() => { setOpenThread(false); setActivePostId(null); }} />
+      <PainelAcoes postId={activePostId || ""} open={openThread} onClose={() => { setOpenThread(false); setActivePostId(null); fetchPosts(); }} />
     </div>
   );
 }
@@ -347,6 +387,7 @@ const styles: Record<string, React.CSSProperties> = {
   postImg: { width: "100%", aspectRatio: "1/1", objectFit: "cover" },
   socialBar: { display: "flex", gap: 20, padding: "12px 15px 8px", fontSize: "24px", alignItems: 'center' },
   captionArea: { padding: "0 15px 10px" },
+  previewBox: { margin: "0 15px 15px", padding: "12px", background: "#080808", borderRadius: "15px", border: "1px solid #111", cursor: "pointer" },
   actionPadding: { padding: "0 15px" },
   listenBtn: { width: "100%", background: "rgba(0,242,254,0.05)", border: "1px solid #00f2fe", color: "#00f2fe", borderRadius: 10, padding: "14px", fontWeight: "bold", fontSize: 11, cursor: "pointer" },
   bottomNav: { position: "fixed", bottom: 0, left: 0, right: 0, background: "#000", borderTop: "1px solid #111", display: "flex", justifyContent: "space-around", padding: "15px", zIndex: 100, fontSize: "20px" },
