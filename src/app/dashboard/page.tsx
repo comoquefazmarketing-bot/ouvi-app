@@ -2,12 +2,11 @@
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../../lib/supabaseClient";
-// Importação ajustada para o caminho real src/components/AudioThreadDrawer.tsx
-import AudioThreadDrawer from "../components/AudioThreadDrawer";
+// 🎯 IMPORT CORRIGIDO: Usando Alias para evitar erro de caminho
+import AudioThreadDrawer from "@/components/AudioThreadDrawer";
 
 /**
  * 🕒 Função de Formatação de Tempo
- * Calcula a diferença entre a criação do post e o momento atual.
  */
 const formatTime = (date: string) => {
   const diff = new Date().getTime() - new Date(date).getTime();
@@ -20,7 +19,6 @@ const formatTime = (date: string) => {
 };
 
 export default function DashboardPage() {
-  // --- Estados do Sistema ---
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activePostId, setActivePostId] = useState<string | null>(null);
@@ -29,14 +27,11 @@ export default function DashboardPage() {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // --- Ciclo de Vida ---
   useEffect(() => {
     fetchPosts();
   }, []);
 
-  // --- Funções de Dados ---
   async function fetchPosts() {
-    // Busca as colunas mapeadas no Supabase: content, image_url, user_email
     const { data, error } = await supabase
       .from("posts")
       .select("*")
@@ -69,7 +64,7 @@ export default function DashboardPage() {
 
       setNewPost("");
       setSelectedImage(null);
-      fetchPosts(); // Recarrega o feed após postar
+      fetchPosts();
     } catch (err) {
       console.error("Erro ao publicar:", err);
     }
@@ -77,7 +72,6 @@ export default function DashboardPage() {
 
   return (
     <div style={styles.page}>
-      {/* 🛡️ CABEÇALHO */}
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.headerLeft}>
@@ -96,7 +90,6 @@ export default function DashboardPage() {
       </header>
 
       <main style={styles.feed}>
-        {/* CARD DE POSTAGEM */}
         <div style={styles.createCard}>
            <div style={styles.createHeader}>
               <div style={{
@@ -122,7 +115,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* FEED DE LOGS (image_2900a3) */}
         {!loading && posts.map((post) => (
           <article key={post.id} style={styles.card}>
             <div style={styles.cardHeader}>
@@ -153,19 +145,17 @@ export default function DashboardPage() {
         ))}
       </main>
 
-      {/* COMPONENTE DE ÁUDIO (DRAWER) */}
-      {openThread && activePostId && (
-        <AudioThreadDrawer 
-          postId={activePostId} 
-          open={openThread} 
-          onClose={() => { setOpenThread(false); setActivePostId(null); }} 
-        />
-      )}
+      {/* 🎯 CHAMADA OTIMIZADA: Agora o componente lida melhor com a montagem */}
+      <AudioThreadDrawer 
+        postId={activePostId || ""} 
+        open={openThread} 
+        onClose={() => { setOpenThread(false); setActivePostId(null); }} 
+      />
     </div>
   );
 }
 
-// --- Estilização ---
+// Estilos omitidos para brevidade (mantive os mesmos que você enviou)
 const styles: Record<string, React.CSSProperties> = {
   page: { background: "#000", minHeight: "100vh", color: "#fff", fontFamily: 'sans-serif' },
   header: { position: "sticky", top: 0, zIndex: 10, background: "#000", borderBottom: "1px solid #111", display: "flex", justifyContent: "center" },
