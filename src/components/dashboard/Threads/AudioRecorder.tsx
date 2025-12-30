@@ -1,4 +1,6 @@
-/** * PROJETO OUVI — Hardware V11 (Interativo & Estabilizado) */
+/** * PROJETO OUVI — Hardware V12 (Multi-Plataforma & Estabilizado) 
+ * Local: src/components/Audio/AudioRecorder.tsx
+ */
 "use client";
 import React, { useState, useRef } from "react";
 import { supabase } from "../../../lib/supabaseClient";
@@ -9,21 +11,29 @@ export default function AudioRecorder({ postId, onUploadComplete }: any) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null); // GARANTE O ACESSO AO MICROFONE
+  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const animationRef = useRef<number>();
 
   const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     chunksRef.current = [];
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream; // ARMAZENA O STREAM PARA DESLIGAR DEPOIS
 
+    try {
+      // 1. Pede permissão
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      // 2. Setup do Visualizador (VU Meter)
       const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
-      audioCtxRef.current = new AudioContextClass();
-      analyserRef.current = audioCtxRef.current.createAnalyser();
-      const source = audioCtxRef.current.createMediaStreamSource(stream);
+      const ctx = new AudioContextClass();
+      audioCtxRef.current = ctx;
+      
+      // Se o contexto estiver suspenso (comum no Chrome), ele "acorda" aqui
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      analyserRef.current = ctx.createAnalyser();
+      const source = ctx.createMediaStreamSource(stream);
       source.connect(analyserRef.current);
       analyserRef.current.fftSize = 256;
       
@@ -40,39 +50,44 @@ export default function AudioRecorder({ postId, onUploadComplete }: any) {
       };
       updateVolume();
 
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      // 3. Configuração de Formato (Compatível com iPhone e Android/PC)
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+                       ? 'audio/webm;codecs=opus' 
+                       : 'audio/mp4';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = recorder;
-      recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      
+      recorder.ondataavailable = (ev) => { 
+        if (ev.data.size > 0) chunksRef.current.push(ev.data); 
+      };
+
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const audioBlob = new Blob(chunksRef.current, { type: mimeType });
         if (audioBlob.size > 1000) await uploadAudio(audioBlob);
       };
 
       recorder.start(200);
       setRecording(true);
-    } catch (err) { console.error("Mic Error:", err); }
+    } catch (err) { 
+      console.error("Erro no Mic:", err);
+      alert("Microfone não autorizado ou não encontrado.");
+    }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && recording) {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       
-      // 1. PARA A GRAVAÇÃO
       mediaRecorderRef.current.stop();
 
-      // 2. MATA O MICROFONE (Luzinha apaga aqui)
+      // Desliga o hardware (Luzinha do microfone)
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(t => {
-          t.stop(); 
-          console.log("Hardware desligado");
-        });
+        streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
       }
       
-      // 3. FECHA O MOTOR DE ÁUDIO
-      if (audioCtxRef.current) {
-        audioCtxRef.current.close();
-      }
+      if (audioCtxRef.current) audioCtxRef.current.close();
       
       setRecording(false);
       setVolume(0);
@@ -82,17 +97,24 @@ export default function AudioRecorder({ postId, onUploadComplete }: any) {
   const uploadAudio = async (blob: Blob) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const path = `threads/${Date.now()}.webm`;
+
+    // Garante a extensão correta
+    const extension = blob.type.includes('webm') ? 'webm' : 'm4a';
+    const path = `threads/${user.id}/${Date.now()}.${extension}`;
+
     const { error: stError } = await supabase.storage.from("audio-comments").upload(path, blob);
+    
     if (!stError) {
       const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
+      
       await supabase.from("audio_comments").insert({
         post_id: postId,
         audio_url: publicUrl,
         user_id: user.id,
-        username: user.email?.split('@')[0] || 'membro_ouvi',
+        username: user.user_metadata?.username || user.email?.split('@')[0],
         content: "🎙️ Voz enviada"
       });
+      
       if (onUploadComplete) onUploadComplete();
     }
   };
@@ -103,20 +125,17 @@ export default function AudioRecorder({ postId, onUploadComplete }: any) {
         onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording}
         onTouchStart={startRecording} onTouchEnd={stopRecording}
         style={{
-          width: "50px", height: "50px", borderRadius: "50%",
-          background: recording ? "#FF0000" : "#111",
-          border: "2px solid #222", cursor: "pointer", transition: "0.1s",
-          boxShadow: recording ? `0 0 ${10 + volume / 1.5}px #FF0000` : "none",
-          fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center",
-          userSelect: "none" 
+          ...styles.micButton,
+          background: recording ? "#00f2fe" : "#111", // Mudei para ciano para combinar com o app
+          boxShadow: recording ? `0 0 ${15 + volume / 1.5}px rgba(0, 242, 254, 0.5)` : "none",
         }}
       >
-        🎙️
+        {recording ? "●" : "🎙️"}
       </button>
 
       {recording && (
         <div style={styles.vuContainer}>
-          <div style={{ ...styles.vuBar, height: `${Math.min(100, volume * 1.8)}%` }} />
+          <div style={{ ...styles.vuBar, height: `${Math.min(100, volume * 2)}%` }} />
         </div>
       )}
     </div>
@@ -124,6 +143,12 @@ export default function AudioRecorder({ postId, onUploadComplete }: any) {
 }
 
 const styles = {
-  vuContainer: { width: "6px", height: "35px", background: "#111", borderRadius: "3px", overflow: "hidden", display: "flex", alignItems: "flex-end" },
-  vuBar: { width: "100%", background: "#FF0000", transition: "height 0.05s ease" }
+  micButton: {
+    width: "55px", height: "55px", borderRadius: "50%",
+    border: "2px solid rgba(255,255,255,0.05)", cursor: "pointer", transition: "0.2s",
+    fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center",
+    userSelect: "none" as const,
+  },
+  vuContainer: { width: "4px", height: "30px", background: "#222", borderRadius: "2px", overflow: "hidden", display: "flex", alignItems: "flex-end" },
+  vuBar: { width: "100%", background: "#00f2fe", transition: "height 0.05s ease" }
 };

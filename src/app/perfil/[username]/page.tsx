@@ -1,88 +1,79 @@
-import { createServerClient } from '@supabase/ssr';
-import { cookies } from 'next/headers';
-import Image from 'next/image';
-import { notFound } from 'next/navigation';
+'use client';
 
-export default async function PerfilPage({ params }: { params: { username: string } }) {
-  const cookieStore = cookies();
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) { return cookieStore.get(name)?.value },
-      },
-    }
-  );
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Home, User, Mic, Search } from 'lucide-react'; // Ícones modernos
 
-  // 1. Busca os dados do perfil para o cabeçalho
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('username', params.username)
-    .single();
+export default function DashboardPage() {
+  const [tab, setTab] = useState(0); // 0 = Geral, 1 = Perfil
 
-  if (!profile) return notFound();
-
-  // 2. Busca os posts desse perfil para a grade
-  const { data: posts } = await supabase
-    .from('posts')
-    .select('*')
-    .eq('user_id', profile.id)
-    .order('created_at', { ascending: false });
+  // Função para o botão Home
+  const irParaHome = () => setTab(0);
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      {/* Header do Perfil */}
-      <div className="flex flex-col items-center pt-10 pb-8 border-b border-zinc-800">
-        <div className="relative w-24 h-24 mb-4">
-          <Image
-            src={profile.avatar_url || '/default-avatar.png'}
-            alt={profile.username}
-            fill
-            className="rounded-full object-cover border-2 border-zinc-700"
-          />
-        </div>
-        <h1 className="text-xl font-bold">@{profile.username}</h1>
-        <p className="text-zinc-500 text-sm mt-1">{posts?.length || 0} publicações</p>
+    <div className="fixed inset-0 bg-black overflow-hidden flex flex-col">
+      
+      {/* 1. Header de Seleção (Estilo Instagram/TikTok) */}
+      <div className="flex justify-center gap-8 py-4 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-50">
+        <button 
+          onClick={() => setTab(0)}
+          className={`text-sm font-bold transition-all duration-300 ${tab === 0 ? 'text-white scale-110' : 'text-zinc-500'}`}
+        >
+          PARA VOCÊ
+        </button>
+        <button 
+          onClick={() => setTab(1)}
+          className={`text-sm font-bold transition-all duration-300 ${tab === 1 ? 'text-white scale-110' : 'text-zinc-500'}`}
+        >
+          MEU PERFIL
+        </button>
       </div>
 
-      {/* Grade 3x3 */}
-      <div className="grid grid-cols-3 gap-0.5 mt-1">
-        {posts?.map((post) => (
-          <div key={post.id} className="relative aspect-square bg-zinc-900 group cursor-pointer">
-            {post.media_type === 'video' ? (
-              <video 
-                src={post.media_url} 
-                className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition"
-              />
-            ) : post.media_type === 'image' ? (
-              <Image
-                src={post.media_url}
-                alt="Post"
-                fill
-                className="object-cover group-hover:scale-105 transition duration-300"
-              />
-            ) : (
-              <div className="flex items-center justify-center h-full border border-zinc-800">
-                <span className="text-[10px] text-zinc-500">ÁUDIO</span>
-              </div>
-            )}
-            
-            {/* Overlay de hover */}
-            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-               <span className="text-white text-xs font-bold">VER</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Se não tiver nada */}
-      {(!posts || posts.length === 0) && (
-        <div className="text-center py-20 text-zinc-600">
-          <p>Nenhuma publicação ainda.</p>
+      {/* 2. Container do Swipe (O "Motor" do movimento) */}
+      <motion.div 
+        className="flex h-full w-[200vw]"
+        animate={{ x: tab === 0 ? '0%' : '-50%' }}
+        transition={{ type: 'spring', stiffness: 300, damping: 35 }}
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        onDragEnd={(e, info) => {
+          if (info.offset.x < -100) setTab(1); // Deslizou para a esquerda -> Perfil
+          if (info.offset.x > 100) setTab(0);  // Deslizou para a direita -> Home
+        }}
+      >
+        {/* LADO A: FEED CRONOLÓGICO */}
+        <div className="w-[100vw] h-full overflow-y-auto pb-32">
+           {/* Aqui entra o seu componente <FeedGeral /> */}
+           <div className="p-10 text-center text-zinc-500">Conteúdo do Feed Geral...</div>
         </div>
-      )}
+
+        {/* LADO B: GRADE 3x3 DO PERFIL */}
+        <div className="w-[100vw] h-full overflow-y-auto pb-32 bg-zinc-950">
+           {/* Aqui entra o seu componente <GradePerfil /> */}
+           <div className="p-10 text-center text-zinc-500">Sua Grade de Posts 3x3...</div>
+        </div>
+      </motion.div>
+
+      {/* 3. BARRA DE NAVEGAÇÃO INFERIOR (Onde fica o Botão Home) */}
+      <nav className="fixed bottom-0 w-full bg-black/90 border-t border-zinc-900 pb-6 pt-3 px-10 flex justify-between items-center z-[100]">
+        <button onClick={irParaHome} className={`p-2 transition ${tab === 0 ? 'text-white' : 'text-zinc-600'}`}>
+          <Home size={28} fill={tab === 0 ? "white" : "none"} />
+        </button>
+        
+        <button className="text-zinc-600 p-2"><Search size={28} /></button>
+        
+        {/* Botão Central de Postar (Destaque) */}
+        <button className="bg-white text-black p-3 rounded-full -mt-10 shadow-lg shadow-white/10 active:scale-90 transition">
+          <Mic size={32} />
+        </button>
+
+        <button className="text-zinc-600 p-2"><Search size={28} /></button>
+
+        <button onClick={() => setTab(1)} className={`p-2 transition ${tab === 1 ? 'text-white' : 'text-zinc-600'}`}>
+          <User size={28} fill={tab === 1 ? "white" : "none"} />
+        </button>
+      </nav>
+
     </div>
   );
 }

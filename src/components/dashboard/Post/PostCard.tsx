@@ -2,7 +2,7 @@
  * PROJETO OUVI — Plataforma Social de Voz
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
  * Autor: Felipe Makarios
- * Ajuste: Menu de Opções e Prévia Clicável Integrados
+ * Versão: 4.0 (Blindagem de Refresh + Recuperação de Posts Antigos)
  */
 
 "use client";
@@ -20,26 +20,33 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
 
   const isVideo = !!post.video_url;
   const mediaUrl = post.video_url || post.image_url;
+  
+  // Fallback de perfil para posts órfãos
+  const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
 
-  // Lógica de Deletar Post
   const handleDeletePost = async () => {
     if (!confirm("Deseja apagar sua voz permanentemente?")) return;
     const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (!error) window.location.reload();
-    else alert("Erro ao apagar: " + error.message);
+    if (!error) {
+       // O Realtime cuidará do refresh para os outros, mas forçamos localmente se necessário
+    } else {
+      alert("Erro ao apagar: " + error.message);
+    }
   };
 
   const handleLike = async () => {
     if (hasLiked) return;
+    setHasLiked(true);
     const newLikes = likes + 1;
     setLikes(newLikes);
-    setHasLiked(true);
+    
+    // Atualiza o banco silenciosamente (sem disparar refresh global no Realtime ajustado)
     await supabase.from("posts").update({ likes: newLikes }).eq("id", post.id);
   };
 
   const handleShare = async () => {
-    const newShares = shares + 1;
     if (!hasShared) {
+      const newShares = shares + 1;
       setShares(newShares);
       setHasShared(true);
       await supabase.from("posts").update({ shares: newShares }).eq("id", post.id);
@@ -59,22 +66,20 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
       viewport={{ once: true }}
       style={styles.card}
     >
-      {/* Header com Menu de Três Pontos */}
       <div style={styles.userRow}>
         <div style={{
           ...styles.avatar, 
-          backgroundImage: post.profiles?.avatar_url ? `url(${post.profiles.avatar_url})` : 'none',
+          backgroundImage: profile.avatar_url ? `url(${profile.avatar_url})` : 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          {!post.profiles?.avatar_url && "👤"}
+          {!profile.avatar_url && "👤"}
         </div>
         <div style={styles.userInfo}>
-          <span style={styles.username}>@{post.profiles?.username || "membro_ouvi"}</span>
+          <span style={styles.username}>@{profile.username}</span>
           <span style={styles.time}>transmitindo agora</span>
         </div>
 
-        {/* BOTÃO TRÊS PONTOS (Apenas Dono) */}
-        {currentUserId === post.user_id && (
+        {currentUserId === post.user_id && post.user_id !== null && (
           <div style={{ marginLeft: "auto", position: "relative" }}>
             <button onClick={() => setShowMenu(!showMenu)} style={styles.moreBtn}>•••</button>
             <AnimatePresence>
@@ -96,7 +101,6 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
         )}
       </div>
 
-      {/* Conteúdo de Texto */}
       {(post.content || post.caption) && (
         <div style={{ padding: "0 20px 16px 20px" }}>
           <p style={{ color: "#efefef", fontSize: "15px", lineHeight: "1.5", fontWeight: "300" }}>
@@ -105,7 +109,6 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
         </div>
       )}
 
-      {/* Mídia */}
       <div style={styles.mediaContainer}>
         {mediaUrl ? (
           isVideo ? (
@@ -122,7 +125,6 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
         )}
       </div>
 
-      {/* PRÉVIA LITERAL E CLICÁVEL (DIRECIONA PARA THREAD) */}
       <motion.div 
         onClick={() => window.location.href = `/dashboard/post/${post.id}`}
         whileTap={{ scale: 0.98 }}
@@ -137,7 +139,6 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
         </div>
       </motion.div>
 
-      {/* BARRA DE INTERAÇÃO */}
       <div style={styles.interactionArea}>
         <div style={styles.reactionGroup}>
           <motion.button whileTap={{ scale: 0.8 }} onClick={handleLike} style={styles.iconBtn}>
@@ -175,27 +176,39 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
-  const fetchFeed = async () => {
+  const fetchFeed = async (showLoading = true) => {
     try {
-      setLoading(true);
+      if (showLoading) setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id || null);
 
+      // !left garante que posts sem dono (user_id NULL) apareçam no feed
       const { data, error } = await supabase
         .from("posts")
-        .select(`*, profiles:user_id (username, avatar_url)`)
+        .select(`*, profiles!left (username, avatar_url)`)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       setPosts(data || []);
     } catch (err) {
-      console.error("Erro:", err);
+      console.error("Erro no Feed:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => { fetchFeed(); }, []);
+  useEffect(() => { 
+    fetchFeed(); 
+
+    // REALTIME OTIMIZADO: Só recarrega em posts novos ou deletados.
+    // Ignora 'UPDATE' para evitar refresh ao curtir.
+    const channel = supabase.channel('feed-changes')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => fetchFeed(false))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, () => fetchFeed(false))
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   return (
     <div style={styles.container}>
