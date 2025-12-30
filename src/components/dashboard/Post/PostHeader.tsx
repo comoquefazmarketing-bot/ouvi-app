@@ -25,7 +25,7 @@ export default function PostHeader({ username, createdAt }: PostHeaderProps) {
     <div style={styles.header}>
       <div style={styles.userInfo}>
         <div style={styles.avatar}>
-          {username.charAt(0).toUpperCase()}
+          {username ? username.charAt(0).toUpperCase() : "U"}
         </div>
         <div style={styles.details}>
           <span style={styles.name}>@{username}</span>
@@ -59,7 +59,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     color: "#000",
-    fontWeight: "bold",
+    fontWeight: "bold" as "bold",
     fontSize: "14px",
   },
   details: {
@@ -70,7 +70,7 @@ const styles = {
   name: {
     color: "#fff",
     fontSize: "14px",
-    fontWeight: "bold",
+    fontWeight: "bold" as "bold",
   },
   dot: { color: "#444", fontSize: "12px" },
   date: { color: "#666", fontSize: "12px" },

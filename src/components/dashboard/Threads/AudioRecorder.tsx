@@ -1,101 +1,129 @@
-/**
- * PROJETO OUVI — Plataforma Social de Voz
- * Autor: Felipe Makarios
- * Assinatura Digital: F-M-A-K-A-R-I-O-S
- * Versão: 1.3 (Efeito Viciante - Haptic Visual)
- */
-
+/** * PROJETO OUVI — Hardware V11 (Interativo & Estabilizado) */
 "use client";
-
 import React, { useState, useRef } from "react";
 import { supabase } from "../../../lib/supabaseClient";
 
-export default function AudioRecorder({ onUploadComplete }: { onUploadComplete: (url: string) => void }) {
+export default function AudioRecorder({ postId, onUploadComplete }: any) {
   const [recording, setRecording] = useState(false);
+  const [volume, setVolume] = useState(0); 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const streamRef = useRef<MediaStream | null>(null); // GARANTE O ACESSO AO MICROFONE
   const chunksRef = useRef<Blob[]>([]);
+  const animationRef = useRef<number>();
 
-  const startRecording = async () => {
+  const startRecording = async (e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    chunksRef.current = [];
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      streamRef.current = stream; // ARMAZENA O STREAM PARA DESLIGAR DEPOIS
 
-      recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
+      const AudioContextClass = (window as any).AudioContext || (window as any).webkitAudioContext;
+      audioCtxRef.current = new AudioContextClass();
+      analyserRef.current = audioCtxRef.current.createAnalyser();
+      const source = audioCtxRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+      analyserRef.current.fftSize = 256;
+      
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
 
-        const fileName = `${Date.now()}_${session.user.id.slice(0, 5)}.webm`;
-        const filePath = `threads/${fileName}`;
-        const { data, error } = await supabase.storage.from("post-images").upload(filePath, blob);
-        
-        if (!error && data) {
-          const { data: { publicUrl } } = supabase.storage.from("post-images").getPublicUrl(filePath);
-          onUploadComplete(publicUrl);
+      const updateVolume = () => {
+        if (analyserRef.current) {
+          analyserRef.current.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+          setVolume(average); 
+          animationRef.current = requestAnimationFrame(updateVolume);
         }
-        stream.getTracks().forEach(t => t.stop());
+      };
+      updateVolume();
+
+      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+      mediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (ev) => { if (ev.data.size > 0) chunksRef.current.push(ev.data); };
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (audioBlob.size > 1000) await uploadAudio(audioBlob);
       };
 
-      recorder.start();
+      recorder.start(200);
       setRecording(true);
-    } catch (err) { alert("Microfone não autorizado."); }
+    } catch (err) { console.error("Mic Error:", err); }
   };
 
   const stopRecording = () => {
     if (mediaRecorderRef.current && recording) {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      
+      // 1. PARA A GRAVAÇÃO
       mediaRecorderRef.current.stop();
+
+      // 2. MATA O MICROFONE (Luzinha apaga aqui)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => {
+          t.stop(); 
+          console.log("Hardware desligado");
+        });
+        streamRef.current = null;
+      }
+      
+      // 3. FECHA O MOTOR DE ÁUDIO
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close();
+      }
+      
       setRecording(false);
+      setVolume(0);
+    }
+  };
+
+  const uploadAudio = async (blob: Blob) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const path = `threads/${Date.now()}.webm`;
+    const { error: stError } = await supabase.storage.from("audio-comments").upload(path, blob);
+    if (!stError) {
+      const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
+      await supabase.from("audio_comments").insert({
+        post_id: postId,
+        audio_url: publicUrl,
+        user_id: user.id,
+        username: user.email?.split('@')[0] || 'membro_ouvi',
+        content: "🎙️ Voz enviada"
+      });
+      if (onUploadComplete) onUploadComplete();
     }
   };
 
   return (
-    <div style={styles.container}>
-      <style>{`
-        @keyframes liquid-pulse {
-          0% { box-shadow: 0 0 0 0 rgba(255, 48, 64, 0.4), 0 0 0 0 rgba(0, 242, 254, 0.2); }
-          50% { box-shadow: 0 0 0 20px rgba(255, 48, 64, 0), 0 0 0 35px rgba(0, 242, 254, 0); }
-          100% { box-shadow: 0 0 0 0 rgba(255, 48, 64, 0), 0 0 0 0 rgba(0, 242, 254, 0); }
-        }
-        .recording-active {
-          animation: liquid-pulse 1.2s infinite cubic-bezier(0.66, 0, 0, 1);
-          transform: scale(0.95) !important;
-          filter: brightness(1.2);
-        }
-        .btn-ouvi {
-          transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        }
-      `}</style>
-
-      <button 
-        onMouseDown={startRecording} onMouseUp={stopRecording}
+    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+      <button
+        onMouseDown={startRecording} onMouseUp={stopRecording} onMouseLeave={stopRecording}
         onTouchStart={startRecording} onTouchEnd={stopRecording}
-        className={`btn-ouvi ${recording ? "recording-active" : ""}`}
-        style={{ 
-          ...styles.btn, 
-          background: recording ? "#ff3040" : "rgba(255,255,255,0.03)",
-          border: recording ? "none" : "1px solid #1a1a1a",
-          color: recording ? "#fff" : "#888",
+        style={{
+          width: "50px", height: "50px", borderRadius: "50%",
+          background: recording ? "#FF0000" : "#111",
+          border: "2px solid #222", cursor: "pointer", transition: "0.1s",
+          boxShadow: recording ? `0 0 ${10 + volume / 1.5}px #FF0000` : "none",
+          fontSize: "20px", display: "flex", alignItems: "center", justifyContent: "center",
+          userSelect: "none" 
         }}
       >
-        <span style={{ fontSize: "20px", marginBottom: "4px" }}>
-          {recording ? "●" : "🎙️"}
-        </span>
-        {recording ? "GRAVANDO..." : "SEGURE PARA FALAR"}
+        🎙️
       </button>
+
+      {recording && (
+        <div style={styles.vuContainer}>
+          <div style={{ ...styles.vuBar, height: `${Math.min(100, volume * 1.8)}%` }} />
+        </div>
+      )}
     </div>
   );
 }
 
 const styles = {
-  container: { width: "100%", display: "flex", justifyContent: "center", padding: "10px 0" },
-  btn: { 
-    width: "100%", height: "70px", borderRadius: "20px", 
-    fontWeight: "900" as "900", fontSize: "10px", cursor: "pointer",
-    display: "flex", flexDirection: "column" as "column", 
-    alignItems: "center", justifyContent: "center",
-    letterSpacing: "2px", outline: "none"
-  }
+  vuContainer: { width: "6px", height: "35px", background: "#111", borderRadius: "3px", overflow: "hidden", display: "flex", alignItems: "flex-end" },
+  vuBar: { width: "100%", background: "#FF0000", transition: "height 0.05s ease" }
 };

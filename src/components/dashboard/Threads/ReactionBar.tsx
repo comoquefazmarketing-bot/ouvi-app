@@ -1,160 +1,235 @@
-/**
- * PROJETO OUVI — Plataforma Social de Voz
- * Autor: Felipe Makarios
- * Assinatura Digital: F-M-A-K-A-R-I-O-S
- * Versão: 4.5 (Social Hardware - Foco em Conversa)
- */
-
 "use client";
-
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { supabase } from "../../../lib/supabaseClient";
+import { motion, AnimatePresence } from "framer-motion";
 
-export default function AudioRecorder({ onUploadComplete }: { onUploadComplete: (url: string) => void }) {
+export default function ReactionBar({ 
+  postId, 
+  commentId, 
+  initialReactions, 
+  onUploadComplete,
+  onOpenThread 
+}: any) {
+  const [isHovered, setIsHovered] = useState(false);
   const [recording, setRecording] = useState(false);
-  const [volume, setVolume] = useState(0);
-  
+  const [reactions, setReactions] = useState(initialReactions || { loved_by: [], energy: 0 });
+  const [userId, setUserId] = useState<string | null>(null);
+  const [realCommentCount, setRealCommentCount] = useState(0);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const animationFrameRef = useRef<number>();
   const chunksRef = useRef<Blob[]>([]);
 
-  // Funções sociais diretas
-  const handleLike = () => console.log("Curtiu!");
-  const handleComment = () => console.log("Abriu Comentários!");
-  const handleShare = () => {
-    if (navigator.share) {
-      navigator.share({ title: 'OUVI', text: 'Entre na conversa!', url: window.location.href });
-    }
+  // Carrega dados do usuário e contagem real de respostas (sub-threads)
+  useEffect(() => {
+    const loadData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+
+      // Busca quantas respostas este comentário específico possui
+      const { count, error } = await supabase
+        .from("audio_comments")
+        .select("*", { count: 'exact', head: true })
+        .eq("parent_id", commentId);
+      
+      if (!error) setRealCommentCount(count || 0);
+    };
+
+    loadData();
+    
+    const style = document.createElement("style");
+    style.innerHTML = `* { scrollbar-width: none !important; } *::-webkit-scrollbar { display: none !important; }`;
+    document.head.appendChild(style);
+
+    const handleClickOutside = () => { if (!recording) setIsHovered(false); };
+    window.addEventListener("click", handleClickOutside);
+    
+    return () => {
+      window.removeEventListener("click", handleClickOutside);
+      document.head.removeChild(style);
+    };
+  }, [recording, commentId]);
+
+  const hasLoved = userId && reactions?.loved_by?.includes(userId);
+
+  // --- LÓGICA DE ENGAJAMENTO (❤️ e ⚡) ---
+  const handleLove = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!userId || !commentId) return;
+    const newLovedBy = hasLoved ? reactions.loved_by.filter((id: string) => id !== userId) : [...reactions.loved_by, userId];
+    const updated = { ...reactions, loved_by: newLovedBy };
+    setReactions(updated);
+    await supabase.from("audio_comments").update({ reactions: updated }).eq("id", commentId);
   };
 
-  const startRecording = async () => {
+  const handleEnergy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!commentId) return;
+    const updated = { ...reactions, energy: (reactions.energy || 0) + 1 };
+    setReactions(updated);
+    await supabase.from("audio_comments").update({ reactions: updated }).eq("id", commentId);
+  };
+
+  // --- LÓGICA DE SUBIDA DE ÁUDIO (🎙️) ---
+  const startRecording = async (e: any) => {
+    e.stopPropagation();
+    if (e.cancelable) e.preventDefault();
+    if (recording) return;
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioContextRef.current = new AudioContext();
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      analyserRef.current.fftSize = 256;
-      
-      const updateVolume = () => {
-        const dataArray = new Uint8Array(analyserRef.current!.frequencyBinCount);
-        analyserRef.current?.getByteFrequencyData(dataArray);
-        let sum = 0;
-        for (let i = 0; i < dataArray.length; i++) { sum += dataArray[i]; }
-        setVolume(sum / dataArray.length);
-        animationFrameRef.current = requestAnimationFrame(updateVolume);
-      };
-      updateVolume();
-
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-
+      recorder.ondataavailable = (ev) => chunksRef.current.push(ev.data);
+      
       recorder.onstop = async () => {
         const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) return;
-
-        const fileName = `${Date.now()}_voice_${session.user.id.slice(0, 5)}.webm`;
-        const filePath = `threads/${fileName}`; // [cite: 2025-12-29]
+        const fileName = `${Date.now()}-${userId}.webm`;
+        const path = `threads/${fileName}`;
         
-        const { data, error } = await supabase.storage.from("post-images").upload(filePath, blob);
-        if (!error) {
-          const { data: { publicUrl } } = supabase.storage.from("post-images").getPublicUrl(filePath);
-          onUploadComplete(publicUrl);
+        const { error: uploadError } = await supabase.storage.from("audio-comments").upload(path, blob);
+        
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
+          
+          // SALVA COMO COMENTÁRIO FILHO (Tudo acontece dentro da thread)
+          const { error: dbError } = await supabase.from("audio_comments").insert({
+            post_id: postId,
+            parent_id: commentId, // Vinculo crucial para a resposta subir no lugar certo
+            audio_url: publicUrl,
+            user_id: userId,
+            username: "membro",
+            content: "🎙️ Resposta em áudio",
+            reactions: { loved_by: [], energy: 0 }
+          });
+          
+          if (!dbError) {
+            setRealCommentCount(prev => prev + 1);
+            if (onUploadComplete) onUploadComplete();
+          }
         }
         stream.getTracks().forEach(t => t.stop());
       };
-
+      
       recorder.start();
       setRecording(true);
-    } catch (err) { alert("Mic off."); }
+    } catch (err) { console.warn("Mic off"); }
   };
 
-  const stopRecording = () => {
+  const stopRecording = (e: any) => {
+    e.stopPropagation();
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
       setRecording(false);
-      setVolume(0);
-      cancelAnimationFrame(animationFrameRef.current!);
-      audioContextRef.current?.close();
     }
   };
 
   return (
-    <div style={styles.container}>
-      <style>{`
-        .btn-active:active { background: #111 !important; transform: translateY(2px); }
-        .recording-glow { box-shadow: 0 0 20px rgba(255, 48, 64, 0.4); border-color: #ff3040 !important; }
-      `}</style>
-
-      <div style={styles.hardwarePanel}>
-        {/* VU Meter sutil de hardware */}
-        <div style={styles.vuMeter}>
-          <div style={{
-            ...styles.vuLevel,
-            width: `${Math.min(volume * 2, 100)}%`,
-            background: recording ? "#ff3040" : "#00f2fe"
-          }} />
-        </div>
-
-        <div style={styles.buttonRow}>
-          <button onClick={handleLike} style={styles.actionBtn} className="btn-active">
-            <span style={styles.icon}>❤️</span>
-          </button>
-
-          <button onClick={handleComment} style={styles.actionBtn} className="btn-active">
-            <span style={styles.icon}>💬</span>
-          </button>
-
-          {/* O Botão de "Falar" é o destaque - cara de Intercomunicador */}
-          <button 
-            onMouseDown={startRecording} onMouseUp={stopRecording}
-            onTouchStart={startRecording} onTouchEnd={stopRecording}
-            style={{...styles.talkBtn, ...(recording ? styles.talkBtnActive : {})}}
-            className={recording ? "recording-glow" : ""}
+    <div 
+      onMouseEnter={() => setIsHovered(true)} 
+      onMouseLeave={() => !recording && setIsHovered(false)}
+      onClick={(e) => { 
+        e.stopPropagation(); 
+        setIsHovered(true); 
+      }}
+      style={styles.wrapper}
+    >
+      <AnimatePresence>
+        {(isHovered || recording || hasLoved) && (
+          <motion.div 
+            layout
+            initial={{ opacity: 0, height: 0, scale: 0.9 }}
+            animate={{ opacity: 1, height: "auto", scale: 1 }}
+            exit={{ opacity: 0, height: 0, scale: 0.9 }}
+            style={styles.pill}
           >
-            <span style={styles.talkIcon}>{recording ? "●" : "TALK"}</span>
-          </button>
+            {/* ❤️ LOVE */}
+            <motion.button whileTap={{ scale: 0.8 }} onClick={handleLove} style={styles.btn}>
+              <span style={styles.emoji}>{hasLoved ? "❤️" : "🤍"}</span>
+              <span style={styles.count}>{reactions?.loved_by?.length || 0}</span>
+            </motion.button>
 
-          <button onClick={handleShare} style={styles.actionBtn} className="btn-active">
-            <span style={styles.icon}>📤</span>
-          </button>
-        </div>
-      </div>
+            {/* 💬 COMENTÁRIOS / ABRIR SUB-THREAD */}
+            <motion.button 
+              whileTap={{ scale: 0.8 }} 
+              onClick={(e) => { e.stopPropagation(); if(onOpenThread) onOpenThread(commentId); }} 
+              style={styles.btn}
+            >
+              <span style={styles.emoji}>💬</span>
+              <span style={styles.count}>{realCommentCount}</span>
+            </motion.button>
+
+            {/* 🎙️ RESPONDER (GRAVA RESPOSTA) */}
+            <div style={styles.resContainer}>
+              <AnimatePresence>
+                {recording && (
+                  <div style={{ position: 'absolute' }}>
+                    {[1, 2].map((i) => (
+                      <motion.div key={i} initial={{ scale: 1, opacity: 0.6 }} animate={{ scale: 3, opacity: 0 }} transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.3 }} style={styles.wave} />
+                    ))}
+                  </div>
+                )}
+              </AnimatePresence>
+
+              <motion.div 
+                onPointerDown={startRecording} 
+                onPointerUp={stopRecording}
+                animate={recording ? { scale: 1.8, backgroundColor: "rgba(255, 0, 0, 0.6)" } : { scale: 1 }}
+                style={styles.innerRes}
+              >
+                <span style={styles.emoji}>🎙️</span>
+                {!recording && (
+                  <div style={styles.idleWrapper}>
+                    <div style={styles.divider} />
+                    <span style={styles.responderBtn}>RESPONDER</span>
+                  </div>
+                )}
+              </motion.div>
+            </div>
+
+            {/* ⚡ ENERGIA */}
+            <motion.button whileTap={{ scale: 1.4 }} onClick={handleEnergy} style={styles.btn}>
+              <span style={styles.emoji}>⚡</span>
+              <span style={styles.count}>{reactions?.energy || 0}</span>
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 const styles = {
-  container: { width: "100%", padding: "10px" },
-  hardwarePanel: {
-    background: "#0c0c0c",
-    borderRadius: "30px",
-    padding: "10px",
-    border: "1px solid #1a1a1a",
-    boxShadow: "0 15px 35px rgba(0,0,0,0.8)"
+  wrapper: {
+    width: "100%",
+    minHeight: "10px", 
+    display: "flex",
+    flexDirection: "column" as "column",
+    justifyContent: "center",
+    cursor: "pointer",
+    zIndex: 10,
+    marginTop: "-6px"
   },
-  vuMeter: {
-    height: "2px", width: "40%", margin: "0 auto 10px", 
-    background: "#111", borderRadius: "1px", overflow: "hidden"
+  pill: { 
+    display: "inline-flex", 
+    alignItems: "center", 
+    alignSelf: "flex-start",
+    gap: "12px", 
+    padding: "4px 14px",
+    background: "rgba(10, 10, 10, 0.95)", 
+    backdropFilter: "blur(20px)",
+    borderRadius: "100px", 
+    border: "1px solid rgba(0,255,255,0.15)",
+    boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+    marginTop: "6px",
+    marginBottom: "4px"
   },
-  vuLevel: { height: "100%", transition: "width 0.1s ease" },
-  buttonRow: { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px" },
-  actionBtn: {
-    flex: 1, background: "none", border: "none", cursor: "pointer",
-    display: "flex", alignItems: "center", justifyContent: "center", height: "45px"
-  },
-  icon: { fontSize: "18px", opacity: 0.6 },
-  talkBtn: {
-    flex: 2, height: "50px", background: "#151515", border: "1px solid #222",
-    borderRadius: "20px", color: "#fff", fontWeight: "900" as "900",
-    fontSize: "12px", letterSpacing: "2px", cursor: "pointer",
-    transition: "all 0.2s"
-  },
-  talkBtnActive: { background: "#ff3040", color: "#fff", border: "none" },
-  talkIcon: { display: "block" },
+  btn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", padding: "0" },
+  emoji: { fontSize: "14px" },
+  count: { fontSize: "11px", color: "#fff", fontWeight: "700" as "700" },
+  divider: { width: "1px", height: "10px", background: "rgba(255,255,255,0.2)", margin: "0 8px" },
+  resContainer: { position: "relative" as "relative", display: "flex", alignItems: "center", justifyContent: "center" },
+  innerRes: { display: "flex", alignItems: "center", justifyContent: "center", padding: "4px 8px", borderRadius: "100px" },
+  idleWrapper: { display: "flex", alignItems: "center" },
+  responderBtn: { fontSize: "9px", fontWeight: "900" as "900", color: "#00FFFF", letterSpacing: "0.5px" },
+  wave: { position: "absolute" as "absolute", width: "20px", height: "20px", borderRadius: "100%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as "none" }
 };

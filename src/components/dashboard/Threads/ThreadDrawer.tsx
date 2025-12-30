@@ -1,206 +1,203 @@
-/**
- * PROJETO OUVI — Plataforma Social de Voz
- * Autor: Felipe Makarios
- * Assinatura Digital: F-M-A-K-A-R-I-O-S
- * Versão: 1.2 (Ambiente Auditivo Visual - ThreadDrawer)
- */
-
 "use client";
-
 import React, { useEffect, useState, useRef } from "react";
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import AudioRecorder from "./AudioRecorder";
 import ReactionBar from "./ReactionBar";
-import CommentItem from "./CommentItem"; // Vamos usar o CommentItem aqui para o loop
 
-interface ThreadDrawerProps {
-  postId: string | null;
-  parentId?: string | null;
-  isOpen: boolean;
-  onClose: () => void;
-  level?: number;
-}
-
-export default function ThreadDrawer({ postId, parentId = null, isOpen, onClose, level = 0 }: ThreadDrawerProps) {
+export default function ThreadDrawer({ post, onClose }: { post: any; onClose: () => void }) {
   const [comments, setComments] = useState<any[]>([]);
-  const [activeSubThread, setActiveSubThread] = useState<string | null>(null);
-  const [textInput, setTextInput] = useState("");
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
-  const animationFrameIdRef = useRef<number | null>(null);
-  const [visualizerIntensity, setVisualizerIntensity] = useState(0); // Para a intensidade visual do fundo
+  const [loading, setLoading] = useState(true);
+  const [inputText, setInputText] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<{username: string} | null>(null);
+  
+  const [replyingTo, setReplyingTo] = useState<{id: string, username: string} | null>(null);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const audioRefs = useRef<{ [key: string]: HTMLAudioElement | null }>({});
+  const commentsEndRef = useRef<HTMLDivElement | null>(null);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      commentsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 150);
+  };
 
   useEffect(() => {
-    if (isOpen && postId) {
-      loadComments();
-      const channel = supabase.channel(`thread_${postId}_${parentId || 'root'}`)
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'audio_comments' }, loadComments)
-        .subscribe();
-      
-      // Inicia o visualizador de áudio ambiente
-      setupAudioVisualizer();
-
-      return () => { 
-        supabase.removeChannel(channel); 
-        cleanupAudioVisualizer();
-      };
-    } else {
-      cleanupAudioVisualizer();
-    }
-  }, [isOpen, postId, parentId]);
-
-  const setupAudioVisualizer = async () => {
-    try {
-      if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-      if (!analyserRef.current) {
-        analyserRef.current = audioContextRef.current.createAnalyser();
-        analyserRef.current.fftSize = 256;
-        dataArrayRef.current = new Uint8Array(analyserRef.current.frequencyBinCount);
+    const loadUserData = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        const { data: profile } = await supabase.from('profiles').select('username').eq('id', user.id).single();
+        if (profile) setUserProfile(profile);
       }
+    };
+    loadUserData();
+    fetchComments();
+  }, [post.id]);
 
-      // Conecta o microfone para pegar o som ambiente
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      // analyserRef.current.connect(audioContextRef.current.destination); // Opcional: para ouvir o feedback
+  useEffect(() => {
+    if (comments.length > 0) scrollToBottom();
+  }, [comments]);
 
-      const animate = () => {
-        analyserRef.current?.getByteFrequencyData(dataArrayRef.current!);
-        let sum = 0;
-        if (dataArrayRef.current) {
-          for (let i = 0; i < dataArrayRef.current.length; i++) {
-            sum += dataArrayRef.current[i];
-          }
-        }
-        const average = sum / (dataArrayRef.current?.length || 1);
-        setVisualizerIntensity(average / 255); // Normaliza para 0-1
-
-        animationFrameIdRef.current = requestAnimationFrame(animate);
-      };
-      animationFrameIdRef.current = requestAnimationFrame(animate);
-
-    } catch (error) {
-      console.warn("Nenhum microfone encontrado para visualização de áudio, ou permissão negada.");
-      setVisualizerIntensity(0); // Garante que a visualização seja 0 se não houver microfone
-    }
-  };
-
-  const cleanupAudioVisualizer = () => {
-    if (animationFrameIdRef.current) {
-      cancelAnimationFrame(animationFrameIdRef.current);
-    }
-    if (analyserRef.current) {
-      analyserRef.current.disconnect();
-      analyserRef.current = null;
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    setVisualizerIntensity(0);
-  };
-
-  async function loadComments() {
-    const query = supabase.from("audio_comments").select("*").eq("post_id", postId);
-    if (parentId) query.eq("parent_id", parentId);
-    else query.is("parent_id", null);
+  const fetchComments = async () => {
+    if (!post?.id) return;
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("audio_comments")
+      .select("*")
+      .eq("post_id", post.id)
+      .order("created_at", { ascending: true });
     
-    const { data } = await query.order("created_at", { ascending: true });
-    if (data) setComments(data);
-  }
-
-  const sendNewComment = async (audioUrl: string | null = null) => {
-    const { data: { session } } = await supabase.auth.getSession();
-    const { error } = await supabase.from("audio_comments").insert([{
-      post_id: postId,
-      parent_id: parentId,
-      content: textInput,
-      audio_url: audioUrl,
-      user_id: session?.user.id,
-      username: session?.user.email?.split('@')[0],
-      reactions: {}
-    }]);
-    if (!error) setTextInput("");
+    if (!error && data) {
+      // Organiza os comentários: Pais primeiro, depois as respostas logo abaixo deles
+      const mainComments = data.filter(c => !c.parent_id);
+      const replies = data.filter(c => c.parent_id);
+      
+      const structured: any[] = [];
+      mainComments.forEach(main => {
+        structured.push(main);
+        const children = replies.filter(r => r.parent_id === main.id);
+        structured.push(...children);
+      });
+      
+      setComments(structured);
+    }
+    setLoading(false);
   };
+
+  const handleSendText = async () => {
+    if (!inputText.trim() || !currentUserId) return;
+    const textToSubmit = inputText.trim();
+    const finalContent = replyingTo ? `@${replyingTo.username} ${textToSubmit}` : textToSubmit;
+    const parentId = replyingTo?.id || null;
+
+    setInputText("");
+    setReplyingTo(null);
+
+    const { error } = await supabase.from("audio_comments").insert({
+      post_id: post.id, 
+      username: userProfile?.username || "membro_ouvi", 
+      content: finalContent, 
+      user_id: currentUserId,
+      parent_id: parentId
+    });
+
+    if (error) {
+      alert(`Erro: ${error.message}`);
+      setInputText(textToSubmit);
+    } else {
+      fetchComments();
+    }
+  };
+
+  // Funções de áudio (simplificadas para o bloco)
+  const startRecording = async () => { /* sua lógica existente */ };
+  const stopRecording = () => { /* sua lógica existente */ };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          {level === 0 && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={styles.overlay} />}
-          
-          <motion.div 
-            initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
-            style={{ 
-              ...styles.sheet, 
-              left: level * 10, 
-              borderLeft: level > 0 ? "1px solid #00f2fe" : "none",
-              // Efeito de fundo que pulsa com o som ambiente
-              boxShadow: `inset 0 0 ${visualizerIntensity * 10}px rgba(0,242,254, ${visualizerIntensity * 0.5})`
-            }}
-          >
-            <div style={styles.header}>
-              <span style={styles.title}>{parentId ? "RESPOSTA" : "O QUE ESTÃO FALANDO"}</span>
-              <button onClick={onClose} style={styles.closeBtn}>X</button>
-            </div>
+    <div style={styles.masterWrapper}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} style={styles.backdrop} />
+      <motion.div initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }} style={styles.drawer}>
+        
+        <div style={styles.header}>
+          <div style={styles.dragHandle} />
+          <h2 style={styles.title}>Conversas em <span style={styles.username}>@{post.profiles?.username}</span></h2>
+        </div>
 
-            <div style={styles.scrollArea}>
-              {comments.map((c) => (
-                <div key={c.id} style={styles.commentContainer}>
-                  <CommentItem comment={c} onReply={() => setActiveSubThread(c.id)} />
-
-                  {/* RECURSIVIDADE PARA CRIAR O "BURACO NEGRO" */}
-                  {activeSubThread === c.id && (
-                    <ThreadDrawer 
-                      postId={postId} 
-                      parentId={c.id} 
-                      isOpen={true} 
-                      onClose={() => setActiveSubThread(null)} 
-                      level={level + 1}
-                    />
-                  )}
+        <div style={styles.content}>
+          {loading ? (
+            <div style={styles.status}>SINTONIZANDO...</div>
+          ) : (
+            <div style={styles.commentList}>
+              {comments.map((comment) => (
+                <div 
+                  key={comment.id} 
+                  style={{
+                    ...styles.commentRow,
+                    marginLeft: comment.parent_id ? "30px" : "0px", // RECUO DA RESPOSTA
+                    borderLeft: comment.parent_id ? "2px solid #00FFFF33" : "none", // LINHA LATERAL NA RESPOSTA
+                    paddingLeft: comment.parent_id ? "15px" : "0px"
+                  }}
+                >
+                  <span style={styles.commentUser}>@{comment.username}</span>
+                  <div style={styles.audioArea}>
+                    {comment.audio_url ? (
+                      <audio controls src={comment.audio_url} style={styles.nativeAudio} />
+                    ) : (
+                      <p style={styles.commentText}>{comment.content}</p>
+                    )}
+                  </div>
+                  <ReactionBar 
+                    postId={post.id} 
+                    commentId={comment.id} 
+                    onOpenThread={() => setReplyingTo({ id: comment.id, username: comment.username })}
+                  />
+                  {!comment.parent_id && <div style={styles.separator} />}
                 </div>
               ))}
+              <div ref={commentsEndRef} />
             </div>
+          )}
+        </div>
 
-            <div style={styles.footer}>
+        <div style={styles.footerBlackPiano}>
+          <div style={styles.inputContainer}>
+            <AnimatePresence>
+              {replyingTo && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} style={styles.replyBadge}>
+                  <span style={styles.replyText}>Respondendo a <b style={{color: '#fff'}}>@{replyingTo.username}</b></span>
+                  <div onClick={() => setReplyingTo(null)} style={styles.cancelIconWrapper}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div style={styles.inputBar}>
               <input 
-                placeholder="Escreva algo..." 
-                value={textInput} 
-                onChange={e => setTextInput(e.target.value)} 
-                style={styles.input}
+                value={inputText} 
+                onChange={(e) => setInputText(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendText()}
+                placeholder={replyingTo ? "Sua resposta..." : "Comente algo..."} 
+                style={styles.textInput} 
               />
-              <AudioRecorder onUploadComplete={(url) => sendNewComment(url)} />
+              <button onClick={handleSendText} style={styles.sendBtn}>➤</button>
             </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+          </div>
+        </div>
+      </motion.div>
+    </div>
   );
 }
 
 const styles = {
-  overlay: { position: "fixed" as "fixed", inset: 0, background: "rgba(0,0,0,0.9)", zIndex: 2000 },
-  sheet: { 
-    position: "fixed" as "fixed", bottom: 0, right: 0, height: "90vh", width: "100%", 
-    background: "#050505", borderRadius: "25px 25px 0 0", zIndex: 2001, 
-    display: "flex", flexDirection: "column" as "column", 
-    transition: "box-shadow 0.1s ease-out", // Transição suave para o box-shadow
-    overflow: "hidden" // Garante que o visualizer não transborde
-  },
-  header: { padding: "15px 20px", borderBottom: "1px solid #111", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  title: { fontSize: "10px", fontWeight: "900", color: "#00f2fe", letterSpacing: "2px" },
-  closeBtn: { background: "none", border: "none", color: "#444", cursor: "pointer" },
-  scrollArea: { flex: 1, overflowY: "auto" as "auto", padding: "20px" },
-  commentContainer: { marginBottom: "20px" },
-  bubble: { padding: "15px", background: "#0c0c0c", borderRadius: "18px", border: "1px solid #151515" }, // Manter se necessário
-  user: { fontSize: "10px", color: "#00f2fe", fontWeight: "bold" as "bold" }, // Manter se necessário
-  text: { fontSize: "14px", margin: "8px 0", color: "#eee" }, // Manter se necessário
-  audio: { width: "100%", height: "30px", marginTop: "10px" }, // Manter se necessário
-  actions: { display: "flex", justifyContent: "space-between", marginTop: "15px", alignItems: "center" }, // Manter se necessário
-  replyBtn: { background: "none", border: "none", color: "#444", fontSize: "10px", fontWeight: "bold" as "bold", cursor: "pointer" }, // Manter se necessário
-  footer: { padding: "20px", borderTop: "1px solid #111", background: "#000", display: "flex", gap: "10px", alignItems: "center" },
-  input: { flex: 1, background: "#0c0c0c", border: "none", borderRadius: "12px", padding: "12px", color: "#fff", outline: "none" }
+  masterWrapper: { position: "fixed" as "fixed", inset: 0, zIndex: 10000, display: "flex", justifyContent: "center", alignItems: "flex-end", pointerEvents: "none" as "none" },
+  backdrop: { position: "absolute" as "absolute", inset: 0, background: "rgba(0, 0, 0, 0.8)", backdropFilter: "blur(15px)", pointerEvents: "auto" as "auto" },
+  drawer: { position: "relative" as "relative", width: "100%", maxWidth: "500px", height: "85vh", background: "#050505", borderRadius: "32px 32px 0 0", display: "flex", flexDirection: "column" as "column", pointerEvents: "auto" as "auto", borderTop: "1px solid #1a1a1a" },
+  header: { padding: "15px 20px" },
+  dragHandle: { width: "40px", height: "4px", background: "#222", borderRadius: "10px", margin: "0 auto 10px auto" },
+  title: { color: "#fff", fontSize: "14px", textAlign: "center" as "center" },
+  username: { color: "#00FFFF" },
+  content: { flex: 1, overflowY: "auto" as "auto", padding: "20px" },
+  commentList: { display: "flex", flexDirection: "column" as "column", gap: "15px" },
+  commentRow: { paddingBottom: "10px", transition: "all 0.3s ease" },
+  commentUser: { color: "#00FFFF", fontSize: "11px", fontWeight: "bold" as "bold" },
+  commentText: { color: "#fff", fontSize: "14px", marginTop: "4px" },
+  audioArea: { margin: "5px 0" },
+  nativeAudio: { width: "100%", height: "30px", filter: "invert(1)" },
+  separator: { height: "1px", background: "#111", marginTop: "15px" },
+  footerBlackPiano: { background: "#000", padding: "20px 20px 40px 20px" },
+  inputContainer: { display: "flex", flexDirection: "column" as "column" },
+  replyBadge: { background: "rgba(0, 255, 255, 0.1)", border: "1px solid rgba(0, 255, 255, 0.2)", borderRadius: "12px", padding: "8px 12px", marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  replyText: { color: "#00FFFF", fontSize: "11px" },
+  cancelIconWrapper: { cursor: "pointer", color: "#00FFFF", padding: "2px" },
+  inputBar: { display: "flex", alignItems: "center", background: "#111", borderRadius: "100px", padding: "5px 10px" },
+  textInput: { flex: 1, background: "transparent", border: "none", color: "#fff", padding: "10px", outline: "none", fontSize: "14px" },
+  sendBtn: { background: "none", border: "none", color: "#00FFFF", fontSize: "18px", cursor: "pointer" },
+  status: { color: "#444", textAlign: "center" as "center", marginTop: "50px" }
 };
