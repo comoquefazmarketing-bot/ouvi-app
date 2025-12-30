@@ -1,27 +1,82 @@
 ﻿/**
- * PROJETO OUVI — Dashboard Consolidado
+ * PROJETO OUVI — Dashboard Consolidado com Core de Voz Injetado
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
  */
 
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Heart, MessageCircle } from 'lucide-react';
 
-// CAMINHOS CORRIGIDOS BASEADOS NA SUA ESTRUTURA DE PASTAS
+// CAMINHOS DE NAVEGAÇÃO
 import ThreadDrawer from "@/components/dashboard/Threads/ThreadDrawer";
 import TabBar from "@/components/dashboard/Navigation/TabBar"; 
 import ActionDrawer from "@/components/dashboard/Navigation/ActionDrawer"; 
-import AudioRecorder from "@/components/Audio/AudioRecorder"; 
 
 const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
   const [hasLiked, setHasLiked] = useState(false);
   const [isThreadOpen, setIsThreadOpen] = useState(false);
+  const [recording, setRecording] = useState(false);
+
+  // REFERÊNCIAS DO HARDWARE (EXTRAÍDAS DO REACTIONBAR)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
 
   const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
+
+  // --- LÓGICA DE GRAVAÇÃO (CÓPIA REVERSA DO CORE) ---
+  const startRecording = async (e: any) => {
+    e.stopPropagation();
+    if (recording) return;
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (ev) => chunksRef.current.push(ev.data);
+      
+      recorder.onstop = async () => {
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        const fileName = `${Date.now()}-${currentUserId}.webm`;
+        const path = `feed/${fileName}`;
+        
+        // Upload para o bucket audio-comments conforme sua estrutura no Supabase
+        const { error: uploadError } = await supabase.storage.from("audio-comments").upload(path, blob);
+        
+        if (!uploadError) {
+          const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
+          
+          // Salva a interação de voz no banco
+          await supabase.from("audio_comments").insert({
+            post_id: post.id,
+            audio_url: publicUrl,
+            user_id: currentUserId,
+            username: "membro",
+            content: "🎙️ Voz do Feed",
+            reactions: { loved_by: [], energy: 0 }
+          });
+          
+          if (onRefresh) onRefresh();
+        }
+        stream.getTracks().forEach(t => t.stop());
+      };
+      
+      recorder.start();
+      setRecording(true);
+    } catch (err) { console.warn("Acesso ao microfone negado."); }
+  };
+
+  const stopRecording = (e: any) => {
+    e.stopPropagation();
+    if (mediaRecorderRef.current && recording) {
+      mediaRecorderRef.current.stop();
+      setRecording(false);
+    }
+  };
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -63,9 +118,29 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
               <MessageCircle size={22} color="#666" />
             </button>
             
-            {/* MICROFONE CORE INTEGRADO */}
+            {/* MICROFONE CORE INJETADO (Hardware Ativo) */}
             <div style={styles.micWrapper}>
-               <AudioRecorder postId={post.id} onUploadComplete={onRefresh} />
+               <AnimatePresence>
+                 {recording && (
+                   <motion.div 
+                     initial={{ scale: 1, opacity: 0.6 }} 
+                     animate={{ scale: 2.5, opacity: 0 }} 
+                     transition={{ repeat: Infinity, duration: 1 }} 
+                     style={styles.wave} 
+                   />
+                 )}
+               </AnimatePresence>
+               <button 
+                 onPointerDown={startRecording} 
+                 onPointerUp={stopRecording}
+                 style={{
+                   ...styles.micBtn, 
+                   color: recording ? "#ff4444" : "#666",
+                   transform: recording ? "scale(1.3)" : "scale(1)"
+                 }}
+               >
+                 <span style={{ fontSize: "20px" }}>🎙️</span>
+               </button>
             </div>
           </div>
           <button onClick={() => setIsThreadOpen(true)} style={styles.talkBtn}>O QUE ESTÃO FALANDO...</button>
@@ -139,7 +214,9 @@ const styles = {
   interactionBar: { padding: "12px 15px", display: "flex", justifyContent: "space-between", alignItems: "center" },
   iconGroup: { display: "flex", gap: "18px", alignItems: "center" },
   iconBtn: { background: "none", border: "none", cursor: "pointer" },
-  micWrapper: { transform: "scale(0.75)", marginTop: "-2px" },
+  micWrapper: { position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" },
+  micBtn: { background: "none", border: "none", cursor: "pointer", transition: "0.2s" },
+  wave: { position: "absolute" as const, width: "30px", height: "30px", borderRadius: "50%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as "none" },
   talkBtn: { background: "rgba(0,242,254,0.05)", padding: "8px 16px", borderRadius: "20px", color: "#00f2fe", fontSize: "9px", fontWeight: "900", border: "1px solid rgba(0,242,254,0.15)" },
   audioPlaceholder: { display: "flex", alignItems: "center", justifyContent: "center" }
 };
