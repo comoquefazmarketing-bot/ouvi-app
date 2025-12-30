@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,56 +27,78 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [step, setStep] = useState(1);
+  const [userId, setUserId] = useState<string | null>(null);
   const router = useRouter();
+
+  // Busca o usuário logado assim que a página carrega
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+      } else {
+        setUserId(user.id);
+        // Tenta pegar o nome já vindo do Google/Instagram para facilitar
+        if (user.user_metadata?.full_name) {
+          setNickname(user.user_metadata.full_name.split(' ')[0].toLowerCase());
+        }
+      }
+    };
+    checkUser();
+  }, [router]);
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
       setPreview(URL.createObjectURL(file));
-      // Espera um pouco para a pessoa ver a foto e muda com efeito
       setTimeout(() => setStep(2), 1200);
     }
   };
 
   const handleFinish = async () => {
-    if (nickname.length < 3) return;
+    if (!userId || nickname.length < 3) return;
     setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
 
-      let avatarPath = "";
+    try {
+      let publicAvatarUrl = "";
+
+      // 1. Upload da foto se houver uma nova
       if (imageFile) {
-        const fileName = `avatar-${user.id}-${Date.now()}`;
-        const { error: storageError } = await supabase.storage
+        const fileExt = imageFile.name.split('.').pop();
+        const fileName = `avatar-${userId}-${Date.now()}.${fileExt}`;
+        
+        const { error: uploadError } = await supabase.storage
           .from('avatars')
           .upload(fileName, imageFile);
-        if (!storageError) avatarPath = fileName;
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+        
+        publicAvatarUrl = urlData.publicUrl;
       }
 
-      // Ajuste no Upsert para garantir que entre no banco
-      const { error: profileError } = await supabase.from("profiles").upsert({ 
-        id: user.id, 
-        username: nickname.trim().toLowerCase(), 
-        avatar_url: avatarPath,
+      // 2. Upsert no Perfil (Cria o "crachá" para liberar os posts)
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: userId,
+        username: nickname.trim().toLowerCase(),
+        avatar_url: publicAvatarUrl || preview, // Usa a nova ou a que já existia
         updated_at: new Date()
       });
 
       if (profileError) throw profileError;
 
-      // Efeito visual de sucesso antes de ir pro feed
       setStep(3);
       setTimeout(() => {
         router.push("/dashboard");
       }, 2000);
 
-    } catch (e) {
-      console.error("Erro ao salvar:", e);
-      alert("Tivemos um problema ao criar seu perfil. Tente outro nome!");
+    } catch (e: any) {
+      console.error("Erro no Onboarding:", e);
+      alert("Erro ao sintonizar perfil: " + (e.message || "Tente outro nome."));
     } finally {
       setLoading(false);
     }
@@ -84,7 +106,6 @@ export default function OnboardingPage() {
 
   return (
     <div style={styles.container}>
-      {/* Luzes de fundo para o efeito UAU */}
       <div style={styles.glow} />
       
       <AnimatePresence mode="wait">
@@ -105,8 +126,8 @@ export default function OnboardingPage() {
                 style={styles.mainCircle} 
                 onClick={() => document.getElementById('fileInput')?.click()}
               >
-                {preview ? <img src={preview} style={styles.preview} /> : (
-                  <span style={{ color: "#00f2fe", fontSize: "14px", fontWeight: "bold" }}>ADICIONAR</span>
+                {preview ? <img src={preview} style={styles.preview} alt="Preview" /> : (
+                  <span style={{ color: "#00f2fe", fontSize: "12px", fontWeight: "900", letterSpacing: "1px" }}>ADICIONAR</span>
                 )}
                 <input id="fileInput" type="file" onChange={handlePhotoUpload} style={{ display: "none" }} accept="image/*" />
               </motion.div>
@@ -130,7 +151,7 @@ export default function OnboardingPage() {
                 <motion.button 
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 0.9 }}
-                  onClick={() => setIsListening(true)} // Simulação ou func real
+                  onClick={() => setIsListening(true)}
                   style={styles.staticMic}
                 >🎤</motion.button>
               )}
@@ -151,9 +172,14 @@ export default function OnboardingPage() {
               whileTap={{ scale: 0.98 }}
               onClick={handleFinish} 
               disabled={nickname.length < 3 || loading} 
-              style={{ ...styles.btn, background: nickname.length >= 3 ? "#00f2fe" : "#111", color: nickname.length >= 3 ? "#000" : "#444" }}
+              style={{ 
+                ...styles.btn, 
+                background: nickname.length >= 3 ? "#00f2fe" : "#111", 
+                color: nickname.length >= 3 ? "#000" : "#444",
+                opacity: loading ? 0.7 : 1
+              }}
             >
-              {loading ? "SALVANDO..." : "TUDO PRONTO!"}
+              {loading ? "SINTONIZANDO..." : "TUDO PRONTO!"}
             </motion.button>
           </motion.div>
         )}
@@ -172,7 +198,7 @@ export default function OnboardingPage() {
             >
               BEM-VINDO!
             </motion.h1>
-            <p style={{color: '#666', marginTop: '10px'}}>Sintonizando seu feed...</p>
+            <p style={{color: '#666', marginTop: '10px', fontSize: '10px', letterSpacing: '2px'}}>A FREQUÊNCIA ESTÁ ATIVA</p>
           </motion.div>
         )}
       </AnimatePresence>
@@ -182,20 +208,20 @@ export default function OnboardingPage() {
 
 const styles = {
   container: { height: "100vh", background: "#000", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" as "relative", overflow: "hidden" },
-  glow: { position: "absolute" as "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "300px", height: "300px", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, rgba(0,0,0,0) 70%)", zIndex: 0 },
-  content: { textAlign: "center" as "center", width: "100%", maxWidth: "320px", zIndex: 1 },
-  question: { color: "#fff", fontSize: "14px", marginBottom: "40px", letterSpacing: "2px", fontWeight: "700" },
+  glow: { position: "absolute" as "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "400px", height: "400px", background: "radial-gradient(circle, rgba(0,242,254,0.08) 0%, rgba(0,0,0,0) 70%)", zIndex: 0 },
+  content: { textAlign: "center" as "center", width: "100%", maxWidth: "320px", zIndex: 1, padding: "20px" },
+  question: { color: "#fff", fontSize: "12px", marginBottom: "40px", letterSpacing: "3px", fontWeight: "900" },
   avatarWrapper: { display: "flex", justifyContent: "center", marginBottom: "30px" },
-  mainCircle: { width: "140px", height: "140px", borderRadius: "50%", border: "2px dashed #00f2fe", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", background: "rgba(0,242,254,0.02)" },
+  mainCircle: { width: "140px", height: "140px", borderRadius: "50%", border: "1px dashed rgba(0,242,254,0.5)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", background: "rgba(0,242,254,0.02)", position: "relative" as "relative" },
   preview: { width: "100%", height: "100%", objectFit: "cover" as "cover" },
-  micArea: { height: "120px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "20px" },
+  micArea: { height: "100px", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "20px" },
   pulseContainer: { position: "relative" as "relative", display: "flex", justifyContent: "center", alignItems: "center" },
-  pulseCircle: { position: "absolute" as "absolute", width: "50px", height: "50px", borderRadius: "50%", background: "rgba(0, 242, 254, 0.1)", border: "1px solid #00f2fe" },
-  staticMic: { background: "#111", border: "none", width: "70px", height: "70px", borderRadius: "50%", cursor: "pointer", fontSize: "24px", boxShadow: "0 0 20px rgba(0,0,0,0.5)" },
-  inputWrapper: { display: "flex", alignItems: "center", padding: "18px", background: "#111", borderRadius: "15px", marginBottom: "25px", border: "1px solid #222" },
-  atSymbol: { color: "#00f2fe", fontWeight: "bold", marginRight: "10px", fontSize: "18px" },
-  input: { background: "none", border: "none", color: "#fff", outline: "none", width: "100%", fontSize: "18px" },
-  btn: { width: "100%", padding: "20px", borderRadius: "15px", border: "none", fontWeight: "bold", cursor: "pointer", transition: "0.3s", letterSpacing: "1px" },
-  logo: { fontSize: "32px", color: "#00f2fe", fontWeight: "900", letterSpacing: "5px" },
-  skip: { color: "#444", fontSize: "12px", cursor: "pointer", marginTop: "25px", textDecoration: "underline" }
+  pulseCircle: { position: "absolute" as "absolute", width: "40px", height: "40px", borderRadius: "50%", background: "rgba(0, 242, 254, 0.1)", border: "1px solid #00f2fe" },
+  staticMic: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", width: "60px", height: "60px", borderRadius: "50%", cursor: "pointer", fontSize: "20px" },
+  inputWrapper: { display: "flex", alignItems: "center", padding: "15px 20px", background: "rgba(255,255,255,0.03)", borderRadius: "20px", marginBottom: "25px", border: "1px solid rgba(255,255,255,0.08)" },
+  atSymbol: { color: "#00f2fe", fontWeight: "900", marginRight: "10px", fontSize: "16px" },
+  input: { background: "none", border: "none", color: "#fff", outline: "none", width: "100%", fontSize: "16px", fontWeight: "600" },
+  btn: { width: "100%", padding: "18px", borderRadius: "20px", border: "none", fontWeight: "900", cursor: "pointer", transition: "0.3s", letterSpacing: "2px", fontSize: "11px" },
+  logo: { fontSize: "28px", color: "#00f2fe", fontWeight: "900", letterSpacing: "6px" },
+  skip: { color: "#444", fontSize: "10px", cursor: "pointer", marginTop: "25px", textDecoration: "underline", letterSpacing: "1px", fontWeight: "700" }
 };
