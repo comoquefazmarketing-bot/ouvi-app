@@ -1,8 +1,8 @@
 /**
  * PROJETO OUVI — Plataforma Social de Voz
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
+ * Versão: 5.0 (Core Reestabelecido - Microfone Vivo no Feed)
  * Autor: Felipe Makarios
- * Versão: 4.0 (Blindagem de Refresh + Recuperação de Posts Antigos)
  */
 
 "use client";
@@ -10,28 +10,25 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
+import AudioRecorder from "@/components/Audio/AudioRecorder"; // O CORAÇÃO DO PROJETO
 
-const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | null }) => {
+const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
   const [shares, setShares] = useState(post.shares || 0);
   const [hasLiked, setHasLiked] = useState(false);
   const [hasShared, setHasShared] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const isVideo = !!post.video_url;
-  const mediaUrl = post.video_url || post.image_url;
+  // Varredura de Mídia: Aceita media_url, video_url ou image_url
+  const mediaUrl = post.media_url || post.video_url || post.image_url;
+  const isVideo = post.type === 'video' || !!post.video_url;
   
-  // Fallback de perfil para posts órfãos
-  const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
+  const profile = post.profiles || { username: "membro_ouvi", avatar_url: null };
 
   const handleDeletePost = async () => {
     if (!confirm("Deseja apagar sua voz permanentemente?")) return;
     const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (!error) {
-       // O Realtime cuidará do refresh para os outros, mas forçamos localmente se necessário
-    } else {
-      alert("Erro ao apagar: " + error.message);
-    }
+    if (error) alert("Erro ao apagar: " + error.message);
   };
 
   const handleLike = async () => {
@@ -39,22 +36,19 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
     setHasLiked(true);
     const newLikes = likes + 1;
     setLikes(newLikes);
-    
-    // Atualiza o banco silenciosamente (sem disparar refresh global no Realtime ajustado)
     await supabase.from("posts").update({ likes: newLikes }).eq("id", post.id);
   };
 
   const handleShare = async () => {
     if (!hasShared) {
-      const newShares = shares + 1;
-      setShares(newShares);
+      setShares(shares + 1);
       setHasShared(true);
-      await supabase.from("posts").update({ shares: newShares }).eq("id", post.id);
+      await supabase.from("posts").update({ shares: shares + 1 }).eq("id", post.id);
     }
     if (navigator.share) {
-      navigator.share({ title: 'OUVI', url: window.location.href });
+      navigator.share({ title: 'OUVI', url: `${window.location.origin}/dashboard/post/${post.id}` });
     } else {
-      navigator.clipboard.writeText(window.location.href);
+      navigator.clipboard.writeText(`${window.location.origin}/dashboard/post/${post.id}`);
       alert("Link copiado!");
     }
   };
@@ -155,9 +149,10 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
             <span style={styles.counter}>{post.comment_count || 0}</span>
           </motion.button>
 
-          <motion.button whileTap={{ scale: 0.9 }} style={styles.micBtn} onClick={() => window.location.href = `/dashboard/post/${post.id}`}>
-            <span style={{fontSize: "22px"}}>🎙️</span>
-          </motion.button>
+          {/* MICROFONE (CORE): Imputado aqui para gravação direta no feed */}
+          <div style={styles.micWrapper}>
+             <AudioRecorder postId={post.id} onUploadComplete={onRefresh} />
+          </div>
 
           <motion.button whileTap={{ scale: 0.8 }} onClick={handleShare} style={styles.iconBtn}>
             <span style={{ fontSize: "18px", color: hasShared ? "#00FFFF" : "#fff" }}>⚡</span>
@@ -182,7 +177,6 @@ export default function Feed() {
       const { data: { user } } = await supabase.auth.getUser();
       setUserId(user?.id || null);
 
-      // !left garante que posts sem dono (user_id NULL) apareçam no feed
       const { data, error } = await supabase
         .from("posts")
         .select(`*, profiles!left (username, avatar_url)`)
@@ -199,9 +193,6 @@ export default function Feed() {
 
   useEffect(() => { 
     fetchFeed(); 
-
-    // REALTIME OTIMIZADO: Só recarrega em posts novos ou deletados.
-    // Ignora 'UPDATE' para evitar refresh ao curtir.
     const channel = supabase.channel('feed-changes')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => fetchFeed(false))
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, () => fetchFeed(false))
@@ -215,10 +206,17 @@ export default function Feed() {
       <div style={styles.ambientGlow} />
       <AnimatePresence>
         {loading ? (
-          <motion.div key="l" style={styles.status}>SINTONIZANDO VIBES...</motion.div>
+          <motion.div key="l" style={styles.status}>SINTONIZANDO...</motion.div>
         ) : (
           <div style={styles.list}>
-            {posts.map((post) => <PostCard key={post.id} post={post} currentUserId={userId} />)}
+            {posts.map((post) => (
+              <PostCard 
+                key={post.id} 
+                post={post} 
+                currentUserId={userId} 
+                onRefresh={() => fetchFeed(false)} 
+              />
+            ))}
           </div>
         )}
       </AnimatePresence>
@@ -227,19 +225,19 @@ export default function Feed() {
 }
 
 const styles = {
-  container: { padding: "20px 16px", background: "#000", minHeight: "100vh", position: "relative" as "relative" },
-  ambientGlow: { position: "absolute" as "absolute", top: "-10%", left: "50%", transform: "translateX(-50%)", width: "100%", height: "400px", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, transparent 70%)", pointerEvents: "none" as "none" },
-  list: { display: "flex", flexDirection: "column" as "column", gap: "24px", maxWidth: "480px", margin: "0 auto", position: "relative" as "relative", zIndex: 1 },
+  container: { padding: "20px 16px", background: "#000", minHeight: "100vh", position: "relative" as const },
+  ambientGlow: { position: "absolute" as const, top: "-10%", left: "50%", transform: "translateX(-50%)", width: "100%", height: "400px", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, transparent 70%)", pointerEvents: "none" as const },
+  list: { display: "flex", flexDirection: "column" as const, gap: "24px", maxWidth: "480px", margin: "0 auto", position: "relative" as const, zIndex: 1 },
   card: { background: "rgba(10, 10, 10, 0.85)", backdropFilter: "blur(25px)", borderRadius: "32px", border: "1px solid rgba(255, 255, 255, 0.05)", overflow: "hidden", boxShadow: "0 15px 35px rgba(0, 0, 0, 0.6)", marginBottom: "10px" },
   userRow: { padding: "18px", display: "flex", alignItems: "center", gap: "14px" },
   avatar: { width: "44px", height: "44px", borderRadius: "50%", backgroundSize: "cover", backgroundPosition: "center", border: "1.5px solid #00FFFF", boxShadow: "0 0 12px rgba(0, 255, 255, 0.4)", background: "#111" },
-  userInfo: { display: "flex", flexDirection: "column" as "column" },
+  userInfo: { display: "flex", flexDirection: "column" as const },
   username: { color: "#fff", fontSize: "14px", fontWeight: "800" },
   time: { color: "rgba(255,255,255,0.25)", fontSize: "10px" },
   moreBtn: { background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: "18px" },
-  overlay: { position: "fixed" as "fixed", inset: 0, zIndex: 90 },
-  dropdown: { position: "absolute" as "absolute", top: "30px", right: "0", width: "140px", background: "rgba(20, 20, 20, 0.95)", backdropFilter: "blur(10px)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.1)", zIndex: 100, overflow: "hidden" },
-  deleteOption: { padding: "15px", color: "#ff4444", fontSize: "12px", fontWeight: "800" as "bold", cursor: "pointer" },
+  overlay: { position: "fixed" as const, inset: 0, zIndex: 90 },
+  dropdown: { position: "absolute" as const, top: "30px", right: "0", width: "140px", background: "rgba(20, 20, 20, 0.95)", backdropFilter: "blur(10px)", borderRadius: "12px", border: "1px solid rgba(255, 255, 255, 0.1)", zIndex: 100, overflow: "hidden" },
+  deleteOption: { padding: "15px", color: "#ff4444", fontSize: "12px", fontWeight: "800" as const, cursor: "pointer" },
   mediaContainer: { width: "100%", background: "rgba(0,0,0,0.6)", minHeight: "220px", display: "flex", alignItems: "center", justifyContent: "center" },
   media: { width: "100%", height: "auto", display: "block" },
   audioOnly: { height: "160px", display: "flex", alignItems: "center", justifyContent: "center", color: "#00FFFF", fontWeight: "900", letterSpacing: "6px" },
@@ -252,7 +250,7 @@ const styles = {
   interactionArea: { padding: "16px 20px", display: "flex", justifyContent: "center", background: "rgba(255, 255, 255, 0.02)" },
   reactionGroup: { display: "flex", gap: "30px", alignItems: "center" },
   iconBtn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" },
-  micBtn: { background: "rgba(0, 255, 255, 0.15)", border: "1px solid #00FFFF", borderRadius: "50%", width: "50px", height: "50px", display: "flex", alignItems: "center", justifyContent: "center" },
+  micWrapper: { transform: "scale(0.8)" }, // Ajuste fino para o hardware caber na barra
   counter: { color: "rgba(255,255,255,0.5)", fontSize: "13px", fontWeight: "600" },
-  status: { color: "#00f2fe", textAlign: "center" as "center", marginTop: "150px", letterSpacing: "2px", fontWeight: "bold", fontSize: "12px" }
+  status: { color: "#00f2fe", textAlign: "center" as const, marginTop: "150px", letterSpacing: "2px", fontWeight: "bold", fontSize: "12px" }
 };
