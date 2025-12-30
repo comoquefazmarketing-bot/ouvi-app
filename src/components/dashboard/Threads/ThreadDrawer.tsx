@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import ReactionBar from "./ReactionBar";
+import ReactionBar from "@/components/dashboard/Threads/ReactionBar";
 
 export default function ThreadDrawer({ post, onClose }: { post: any; onClose: () => void }) {
   const [comments, setComments] = useState<any[]>([]);

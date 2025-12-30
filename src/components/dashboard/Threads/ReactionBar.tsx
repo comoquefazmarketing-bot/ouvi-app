@@ -1,6 +1,11 @@
+/**
+ * PROJETO OUVI — ReactionBar com Core de Voz Nativo
+ * Local: E:\OUVI\ouvi-app\src\components\dashboard\Threads\ReactionBar.tsx
+ */
+
 "use client";
 import React, { useState, useRef, useEffect } from "react";
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient"; // Ajustado para caminho absoluto
 import { motion, AnimatePresence } from "framer-motion";
 
 export default function ReactionBar({ 
@@ -15,16 +20,16 @@ export default function ReactionBar({
   const [reactions, setReactions] = useState(initialReactions || { loved_by: [], energy: 0 });
   const [userId, setUserId] = useState<string | null>(null);
   const [realCommentCount, setRealCommentCount] = useState(0);
+  
+  // REFERÊNCIAS DE HARDWARE (CORE INTOCÁVEL)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Carrega dados do usuário e contagem real de respostas (sub-threads)
   useEffect(() => {
     const loadData = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) setUserId(user.id);
 
-      // Busca quantas respostas este comentário específico possui
       const { count, error } = await supabase
         .from("audio_comments")
         .select("*", { count: 'exact', head: true })
@@ -35,6 +40,7 @@ export default function ReactionBar({
 
     loadData();
     
+    // Remove scrollbars para estética Black Piano
     const style = document.createElement("style");
     style.innerHTML = `* { scrollbar-width: none !important; } *::-webkit-scrollbar { display: none !important; }`;
     document.head.appendChild(style);
@@ -50,7 +56,7 @@ export default function ReactionBar({
 
   const hasLoved = userId && reactions?.loved_by?.includes(userId);
 
-  // --- LÓGICA DE ENGAJAMENTO (❤️ e ⚡) ---
+  // --- LÓGICA DE ENGAJAMENTO ---
   const handleLove = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!userId || !commentId) return;
@@ -68,7 +74,7 @@ export default function ReactionBar({
     await supabase.from("audio_comments").update({ reactions: updated }).eq("id", commentId);
   };
 
-  // --- LÓGICA DE SUBIDA DE ÁUDIO (🎙️) ---
+  // --- LÓGICA DE HARDWARE (MICROFONE) ---
   const startRecording = async (e: any) => {
     e.stopPropagation();
     if (e.cancelable) e.preventDefault();
@@ -91,10 +97,9 @@ export default function ReactionBar({
         if (!uploadError) {
           const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
           
-          // SALVA COMO COMENTÁRIO FILHO (Tudo acontece dentro da thread)
           const { error: dbError } = await supabase.from("audio_comments").insert({
             post_id: postId,
-            parent_id: commentId, // Vinculo crucial para a resposta subir no lugar certo
+            parent_id: commentId,
             audio_url: publicUrl,
             user_id: userId,
             username: "membro",
@@ -127,28 +132,23 @@ export default function ReactionBar({
     <div 
       onMouseEnter={() => setIsHovered(true)} 
       onMouseLeave={() => !recording && setIsHovered(false)}
-      onClick={(e) => { 
-        e.stopPropagation(); 
-        setIsHovered(true); 
-      }}
+      onClick={(e) => { e.stopPropagation(); setIsHovered(true); }}
       style={styles.wrapper}
     >
       <AnimatePresence>
         {(isHovered || recording || hasLoved) && (
           <motion.div 
             layout
-            initial={{ opacity: 0, height: 0, scale: 0.9 }}
-            animate={{ opacity: 1, height: "auto", scale: 1 }}
-            exit={{ opacity: 0, height: 0, scale: 0.9 }}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
             style={styles.pill}
           >
-            {/* ❤️ LOVE */}
             <motion.button whileTap={{ scale: 0.8 }} onClick={handleLove} style={styles.btn}>
               <span style={styles.emoji}>{hasLoved ? "❤️" : "🤍"}</span>
               <span style={styles.count}>{reactions?.loved_by?.length || 0}</span>
             </motion.button>
 
-            {/* 💬 COMENTÁRIOS / ABRIR SUB-THREAD */}
             <motion.button 
               whileTap={{ scale: 0.8 }} 
               onClick={(e) => { e.stopPropagation(); if(onOpenThread) onOpenThread(commentId); }} 
@@ -158,7 +158,6 @@ export default function ReactionBar({
               <span style={styles.count}>{realCommentCount}</span>
             </motion.button>
 
-            {/* 🎙️ RESPONDER (GRAVA RESPOSTA) */}
             <div style={styles.resContainer}>
               <AnimatePresence>
                 {recording && (
@@ -186,7 +185,6 @@ export default function ReactionBar({
               </motion.div>
             </div>
 
-            {/* ⚡ ENERGIA */}
             <motion.button whileTap={{ scale: 1.4 }} onClick={handleEnergy} style={styles.btn}>
               <span style={styles.emoji}>⚡</span>
               <span style={styles.count}>{reactions?.energy || 0}</span>
@@ -199,37 +197,15 @@ export default function ReactionBar({
 }
 
 const styles = {
-  wrapper: {
-    width: "100%",
-    minHeight: "10px", 
-    display: "flex",
-    flexDirection: "column" as "column",
-    justifyContent: "center",
-    cursor: "pointer",
-    zIndex: 10,
-    marginTop: "-6px"
-  },
-  pill: { 
-    display: "inline-flex", 
-    alignItems: "center", 
-    alignSelf: "flex-start",
-    gap: "12px", 
-    padding: "4px 14px",
-    background: "rgba(10, 10, 10, 0.95)", 
-    backdropFilter: "blur(20px)",
-    borderRadius: "100px", 
-    border: "1px solid rgba(0,255,255,0.15)",
-    boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
-    marginTop: "6px",
-    marginBottom: "4px"
-  },
+  wrapper: { width: "100%", display: "flex", flexDirection: "column" as const, justifyContent: "center", cursor: "pointer", zIndex: 10, marginTop: "-6px" },
+  pill: { display: "inline-flex", alignItems: "center", alignSelf: "flex-start", gap: "12px", padding: "4px 14px", background: "rgba(10, 10, 10, 0.95)", backdropFilter: "blur(20px)", borderRadius: "100px", border: "1px solid rgba(0,255,255,0.15)", boxShadow: "0 4px 15px rgba(0,0,0,0.5)", marginTop: "6px", marginBottom: "4px" },
   btn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "4px", cursor: "pointer", padding: "0" },
   emoji: { fontSize: "14px" },
-  count: { fontSize: "11px", color: "#fff", fontWeight: "700" as "700" },
+  count: { fontSize: "11px", color: "#fff", fontWeight: "700" as const },
   divider: { width: "1px", height: "10px", background: "rgba(255,255,255,0.2)", margin: "0 8px" },
-  resContainer: { position: "relative" as "relative", display: "flex", alignItems: "center", justifyContent: "center" },
+  resContainer: { position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" },
   innerRes: { display: "flex", alignItems: "center", justifyContent: "center", padding: "4px 8px", borderRadius: "100px" },
   idleWrapper: { display: "flex", alignItems: "center" },
-  responderBtn: { fontSize: "9px", fontWeight: "900" as "900", color: "#00FFFF", letterSpacing: "0.5px" },
-  wave: { position: "absolute" as "absolute", width: "20px", height: "20px", borderRadius: "100%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as "none" }
+  responderBtn: { fontSize: "9px", fontWeight: "900" as const, color: "#00FFFF", letterSpacing: "0.5px" },
+  wave: { position: "absolute" as const, width: "20px", height: "20px", borderRadius: "100%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as const }
 };
