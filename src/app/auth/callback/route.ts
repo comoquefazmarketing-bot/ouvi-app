@@ -26,7 +26,7 @@ export async function GET(request: Request) {
       }
     )
     
-    // Troca o código pela sessão
+    // Troca o código pela sessão real
     await supabase.auth.exchangeCodeForSession(code)
   }
 
