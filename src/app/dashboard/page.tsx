@@ -1,6 +1,5 @@
 ﻿/**
  * PROJETO OUVI — Dashboard Consolidado
- * Integração: Feed + TabBar + ActionDrawer (Estúdio de Criação)
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
  */
 
@@ -9,13 +8,15 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
-import { Heart, MessageCircle, Mic } from 'lucide-react';
-import ThreadDrawer from "@/components/dashboard/Threads/ThreadDrawer";
-import TabBar from "@/components/dashboard/TabBar"; 
-import ActionDrawer from "@/components/dashboard/ActionDrawer"; // O código que você enviou
+import { Heart, MessageCircle } from 'lucide-react';
 
-// --- COMPONENTE DE CARD DO FEED ---
-const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | null }) => {
+// CAMINHOS CORRIGIDOS BASEADOS NA SUA ESTRUTURA DE PASTAS
+import ThreadDrawer from "@/components/dashboard/Threads/ThreadDrawer";
+import TabBar from "@/components/dashboard/Navigation/TabBar"; 
+import ActionDrawer from "@/components/dashboard/Navigation/ActionDrawer"; 
+import AudioRecorder from "@/components/Audio/AudioRecorder"; 
+
+const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
   const [hasLiked, setHasLiked] = useState(false);
   const [isThreadOpen, setIsThreadOpen] = useState(false);
@@ -47,15 +48,25 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
           ) : post.image_url ? (
             <img src={post.image_url} style={styles.media} alt="Post" />
           ) : (
-            <div style={styles.audioPlaceholder}><Mic size={40} color="#00f2fe" opacity={0.2} /></div>
+            <div style={styles.audioPlaceholder}>
+               <span style={{color: "#00f2fe", fontSize: "10px", fontWeight: "bold", letterSpacing: "2px"}}>SOM ATIVO</span>
+            </div>
           )}
         </div>
 
         <div style={styles.interactionBar}>
           <div style={styles.iconGroup}>
-            <button onClick={handleLike} style={styles.iconBtn}><Heart size={22} color={hasLiked ? "#ff4444" : "#666"} fill={hasLiked ? "#ff4444" : "none"} /></button>
-            <button onClick={() => setIsThreadOpen(true)} style={styles.iconBtn}><MessageCircle size={22} color="#666" /></button>
-            <button style={styles.iconBtn}><Mic size={22} color="#666" /></button>
+            <button onClick={handleLike} style={styles.iconBtn}>
+              <Heart size={22} color={hasLiked ? "#ff4444" : "#666"} fill={hasLiked ? "#ff4444" : "none"} />
+            </button>
+            <button onClick={() => setIsThreadOpen(true)} style={styles.iconBtn}>
+              <MessageCircle size={22} color="#666" />
+            </button>
+            
+            {/* MICROFONE CORE INTEGRADO */}
+            <div style={styles.micWrapper}>
+               <AudioRecorder postId={post.id} onUploadComplete={onRefresh} />
+            </div>
           </div>
           <button onClick={() => setIsThreadOpen(true)} style={styles.talkBtn}>O QUE ESTÃO FALANDO...</button>
         </div>
@@ -65,9 +76,7 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
   );
 };
 
-// --- PÁGINA PRINCIPAL ---
 export default function DashboardPage() {
-  const [tab, setTab] = useState(0);
   const [posts, setPosts] = useState<any[]>([]);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -75,40 +84,45 @@ export default function DashboardPage() {
   const fetchFeed = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     setCurrentUserId(user?.id || null);
-    const { data } = await supabase.from("posts").select(`*, profiles!left (username, avatar_url)`).order("created_at", { ascending: false });
+    const { data } = await supabase
+      .from("posts")
+      .select(`*, profiles!left (username, avatar_url)`)
+      .order("created_at", { ascending: false });
     setPosts(data || []);
   };
 
   useEffect(() => {
     fetchFeed();
-    // Realtime para atualizar o feed assim que o ActionDrawer fechar com sucesso
-    const channel = supabase.channel('feed-view').on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchFeed()).subscribe();
+    const channel = supabase.channel('feed-view')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchFeed())
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   return (
     <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
-      
-      {/* HEADER LOGO */}
       <div className="flex justify-center py-6 border-b border-white/5 bg-black/50 backdrop-blur-md z-50">
         <span className="text-white font-black tracking-[0.5em] text-[12px] italic">OUVI</span>
       </div>
 
-      {/* ÁREA DE CONTEÚDO */}
       <div className="flex-1 overflow-y-auto px-4 pt-4 pb-40">
         <div className="max-w-[500px] mx-auto space-y-8">
-          {posts.map(p => <PostCard key={p.id} post={p} currentUserId={currentUserId} />)}
+          {posts.map(p => (
+            <PostCard 
+              key={p.id} 
+              post={p} 
+              currentUserId={currentUserId} 
+              onRefresh={fetchFeed} 
+            />
+          ))}
         </div>
       </div>
 
-      {/* TABBAR DE ALTA PRECISÃO (Botão central abre o ActionDrawer) */}
       <div className="fixed bottom-6 w-full flex justify-center px-6 z-[100]">
         <TabBar onPlusClick={() => setIsDrawerOpen(true)} />
       </div>
 
-      {/* ESTÚDIO DE CRIAÇÃO (Seu ActionDrawer) */}
       <ActionDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
-
     </div>
   );
 }
@@ -123,8 +137,9 @@ const styles = {
   mediaFrame: { width: "100%", aspectRatio: "1/1", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" },
   media: { width: "100%", height: "100%", objectFit: "cover" as const },
   interactionBar: { padding: "12px 15px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  iconGroup: { display: "flex", gap: "18px" },
-  iconBtn: { background: "none", border: "none" },
+  iconGroup: { display: "flex", gap: "18px", alignItems: "center" },
+  iconBtn: { background: "none", border: "none", cursor: "pointer" },
+  micWrapper: { transform: "scale(0.75)", marginTop: "-2px" },
   talkBtn: { background: "rgba(0,242,254,0.05)", padding: "8px 16px", borderRadius: "20px", color: "#00f2fe", fontSize: "9px", fontWeight: "900", border: "1px solid rgba(0,242,254,0.15)" },
   audioPlaceholder: { display: "flex", alignItems: "center", justifyContent: "center" }
 };
