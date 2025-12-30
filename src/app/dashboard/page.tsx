@@ -1,7 +1,7 @@
 ﻿/**
  * PROJETO OUVI — Feed Premium (Elite Interaction + Realtime)
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
- * Versão: 3.5 (Realtime + Silêncio + Delete + Threads)
+ * Versão: 4.5 (Restauração de Layout Premium + Busca Total)
  * Autor: Felipe Makarios
  */
 
@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 import ThreadDrawer from "@/components/dashboard/Threads/ThreadDrawer";
 
+// Funções de Utilidade
 const getRelativeTime = (date: string) => {
   if (!date) return "AGORA";
   const now = new Date();
@@ -27,57 +28,40 @@ const getRelativeTime = (date: string) => {
 
 const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | null }) => {
   const [likes, setLikes] = useState(post.likes || 0);
-  const [shares, setShares] = useState(post.shares || 0);
   const [commentCount, setCommentCount] = useState(0);
-  const [audioCount, setAudioCount] = useState(0);
-  const [previews, setPreviews] = useState<any[]>([]);
   const [hasLiked, setHasLiked] = useState(false);
   const [isThreadOpen, setIsThreadOpen] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const fetchThreadData = async () => {
-    const { data, count } = await supabase
-      .from("audio_comments")
-      .select("content, username, audio_url", { count: "exact" })
-      .eq("post_id", post.id)
-      .order("created_at", { ascending: false });
+  // Fallback para posts sem perfil (Garante que a foto apareça)
+  const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
 
+  const fetchStats = async () => {
+    const { count } = await supabase
+      .from("audio_comments")
+      .select("*", { count: "exact", head: true })
+      .eq("post_id", post.id);
     if (count !== null) setCommentCount(count);
-    if (data) {
-      setPreviews(data.slice(0, 2));
-      const audios = data.filter(t => !!t.audio_url).length;
-      setAudioCount(audios);
-    }
   };
 
-  useEffect(() => {
-    fetchThreadData();
-    const channel = supabase.channel(`stats-${post.id}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'audio_comments', filter: `post_id=eq.${post.id}` }, 
-      () => fetchThreadData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+  useEffect(() => { 
+    fetchStats(); 
   }, [post.id]);
 
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (hasLiked) return;
-    setLikes(prev => prev + 1);
     setHasLiked(true);
-    await supabase.from("posts").update({ likes: likes + 1 }).eq("id", post.id);
+    setLikes((prev: number) => prev + 1);
+    await supabase.from("posts").update({ likes: (post.likes || 0) + 1 }).eq("id", post.id);
   };
 
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm("Deseja apagar sua voz permanentemente?")) {
       const { error } = await supabase.from("posts").delete().eq("id", post.id);
-      if (!error) {
-        // O Realtime cuidará de remover do feed, mas forçamos localmente para agilizar
-        window.location.reload();
-      } else {
-        alert("Erro ao apagar: " + error.message);
-      }
+      if (error) alert("Erro ao apagar: " + error.message);
     }
   };
 
@@ -93,19 +77,20 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
       >
         <div style={styles.glassOverlay} />
 
+        {/* Header do Card */}
         <div style={styles.userRow}>
-          <div style={{...styles.avatar, backgroundImage: post.profiles?.avatar_url ? `url(${post.profiles.avatar_url})` : 'none'}}>
-            {!post.profiles?.avatar_url && "👤"}
+          <div style={{...styles.avatar, backgroundImage: profile.avatar_url ? `url(${profile.avatar_url})` : 'none'}}>
+            {!profile.avatar_url && "👤"}
           </div>
           <div style={styles.userInfo}>
-            <span style={styles.username}>@{post.profiles?.username || "membro_ouvi"}</span>
+            <span style={styles.username}>@{profile.username}</span>
             <div style={styles.liveIndicator}>
               <span style={styles.liveDot} />
               <span style={styles.time}>{getRelativeTime(post.created_at)}</span>
             </div>
           </div>
 
-          {currentUserId === post.user_id && (
+          {currentUserId === post.user_id && post.user_id !== null && (
             <div style={{ marginLeft: "auto", position: "relative" }}>
               <button onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }} style={styles.moreBtn}> ••• </button>
               <AnimatePresence>
@@ -122,17 +107,19 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
           )}
         </div>
 
+        {/* Texto do Post */}
         {(post.content || post.caption) && (
           <div style={styles.textContent}>
             <p style={styles.postText}>{post.content || post.caption}</p>
           </div>
         )}
 
+        {/* Mídia Premium */}
         <div style={styles.mediaFrame}>
           {post.video_url ? (
             <video src={post.video_url} style={styles.media} autoPlay muted loop playsInline />
           ) : post.image_url ? (
-            <img src={post.image_url} style={styles.media} alt="Live" />
+            <img src={post.image_url} style={styles.media} alt="Conteúdo" />
           ) : (
             <div style={styles.audioPlaceholder}>
               <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.3, 0.1] }} transition={{ duration: 4, repeat: Infinity }} style={styles.sonar} />
@@ -141,17 +128,7 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
           )}
         </div>
 
-        {previews.length > 0 && (
-          <div style={styles.previewSection} onClick={() => setIsThreadOpen(true)}>
-            {previews.map((msg, i) => (
-              <div key={i} style={styles.previewLine}>
-                <span style={styles.previewUser}>@{msg.username}:</span>
-                <span style={styles.previewText}>{msg.audio_url ? "🎙️ Áudio" : msg.content}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
+        {/* Barra de Interação Elite */}
         <div style={styles.interactionBar}>
           <div style={styles.statsGroup}>
             <motion.button onClick={handleLike} whileTap={{ scale: 0.7 }} style={styles.statBtn}>
@@ -159,12 +136,8 @@ const PostCard = ({ post, currentUserId }: { post: any, currentUserId: string | 
               <motion.span animate={{ opacity: (hasLiked || isHovered) ? 1 : 0 }} style={styles.statNum}>{likes}</motion.span>
             </motion.button>
             <motion.button onClick={() => setIsThreadOpen(true)} whileTap={{ scale: 0.7 }} style={styles.statBtn}>
-              <span style={{ fontSize: "18px", opacity: isHovered ? 1 : 0.3 }}>⌨️</span>
+              <span style={{ fontSize: "18px", opacity: isHovered ? 1 : 0.3 }}>💬</span>
               <motion.span animate={{ opacity: isHovered ? 1 : 0 }} style={styles.statNum}>{commentCount}</motion.span>
-            </motion.button>
-            <motion.button onClick={() => setIsThreadOpen(true)} whileTap={{ scale: 0.7 }} style={styles.statBtn}>
-              <span style={{ fontSize: "18px", opacity: isHovered ? 1 : 0.3 }}>🎙️</span>
-              <motion.span animate={{ opacity: isHovered ? 1 : 0 }} style={styles.statNum}>{audioCount}</motion.span>
             </motion.button>
           </div>
 
@@ -189,23 +162,34 @@ export default function Feed() {
   const [loading, setLoading] = useState(true);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
-  const fetchFeed = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUserId(user?.id || null);
+  const fetchFeed = async (silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id || null);
 
-    const { data } = await supabase.from("posts").select(`*, profiles:user_id (username, avatar_url)`).order("created_at", { ascending: false });
-    if (data) setPosts(data);
-    setLoading(false);
+      // BUSCA TOTAL: Profiles!left garante que posts órfãos apareçam
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`*, profiles!left (username, avatar_url)`)
+        .order("created_at", { ascending: false });
+      
+      if (error) throw error;
+      setPosts(data || []);
+    } catch (err) {
+      console.error("Erro ao sintonizar feed:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     fetchFeed();
 
-    // MOTOR REALTIME: Atualiza feed automaticamente em INSERT ou DELETE
+    // REALTIME: Apenas para novos posts ou deleções (Evita refresh no like)
     const channel = supabase.channel('feed-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => {
-        fetchFeed();
-      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'posts' }, () => fetchFeed(true))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'posts' }, () => fetchFeed(true))
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -220,19 +204,11 @@ export default function Feed() {
           {posts.map(post => <PostCard key={post.id} post={post} currentUserId={currentUserId} />)}
         </div>
       ) : (
-        /* ESTADO DE SILÊNCIO */
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={styles.emptyState}>
-          <div style={styles.emptyIcon}>🤫</div>
-          <h2 style={styles.emptyTitle}>O SILÊNCIO REINA POR AQUI</h2>
-          <p style={styles.emptyText}>Seja a primeira voz a quebrar esse vácuo.</p>
-          <motion.button 
-            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            style={styles.emptyBtn}
-          >
-            SOLTAR A VOZ AGORA
-          </motion.button>
-        </motion.div>
+        <div style={styles.emptyState}>
+          <span style={{fontSize: '40px'}}>🤫</span>
+          <h2 style={styles.emptyTitle}>O SILÊNCIO REINA</h2>
+          <button onClick={() => window.location.reload()} style={styles.emptyBtn}>RECARREGAR</button>
+        </div>
       )}
     </div>
   );
@@ -241,39 +217,33 @@ export default function Feed() {
 const styles = {
   container: { background: "#000", minHeight: "100vh", padding: "20px 16px" },
   list: { display: "flex", flexDirection: "column" as const, gap: "35px", maxWidth: "460px", margin: "0 auto" },
-  card: { background: "#080808", borderRadius: "32px", border: "1px solid rgba(255,255,255,0.05)", position: "relative" as const, overflow: "hidden" },
-  glassOverlay: { position: "absolute" as const, inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)", pointerEvents: "none" as const },
-  userRow: { padding: "18px 20px", display: "flex", alignItems: "center", gap: "12px", position: "relative" as const, zIndex: 10 },
-  avatar: { width: "36px", height: "36px", borderRadius: "50%", backgroundSize: "cover", border: "1px solid #00FFFF" },
+  card: { background: "#080808", borderRadius: "32px", border: "1px solid rgba(255,255,255,0.05)", position: "relative" as const, overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.4)" },
+  glassOverlay: { position: "absolute" as const, inset: 0, background: "linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%)", pointerEvents: "none" as const },
+  userRow: { padding: "18px 20px", display: "flex", alignItems: "center", gap: "12px", zIndex: 10, position: "relative" as const },
+  avatar: { width: "38px", height: "38px", borderRadius: "50%", backgroundSize: "cover", border: "1.5px solid #00FFFF", backgroundPosition: "center" },
   userInfo: { display: "flex", flexDirection: "column" as const },
-  username: { color: "#FFF", fontSize: "13px", fontWeight: "900" },
+  username: { color: "#FFF", fontSize: "14px", fontWeight: "900" },
   liveIndicator: { display: "flex", alignItems: "center", gap: "6px" },
   liveDot: { width: "4px", height: "4px", borderRadius: "50%", background: "#00FFFF", boxShadow: "0 0 8px #00FFFF" },
-  time: { color: "#00FFFF", fontSize: "8px", fontWeight: "900" },
-  moreBtn: { background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: "18px", padding: "5px" },
+  time: { color: "#00FFFF", fontSize: "9px", fontWeight: "900", letterSpacing: "0.5px" },
+  moreBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "18px" },
   overlay: { position: "fixed" as const, inset: 0, zIndex: 90 },
   dropdown: { position: "absolute" as const, top: "30px", right: "0", width: "130px", background: "rgba(10, 10, 10, 0.95)", backdropFilter: "blur(20px)", borderRadius: "15px", border: "1px solid rgba(255, 255, 255, 0.1)", zIndex: 100 },
   deleteOption: { padding: "15px", color: "#ff4444", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer", textAlign: "center" as const },
   textContent: { padding: "0 20px 15px 20px" },
-  postText: { color: "#efefef", fontSize: "14px", fontWeight: "300", lineHeight: "1.5" },
-  mediaFrame: { width: "100%", background: "#000", minHeight: "260px", display: "flex", alignItems: "center", justifyContent: "center" },
-  media: { width: "100%", height: "auto" },
-  previewSection: { padding: "12px 20px", background: "rgba(0, 255, 255, 0.01)", borderTop: "1px solid rgba(255,255,255,0.03)", cursor: "pointer" },
-  previewLine: { fontSize: "11px", marginBottom: "4px", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis", color: "rgba(255,255,255,0.5)" },
-  previewUser: { color: "#00FFFF", fontWeight: "800", marginRight: "6px" },
-  previewText: { fontWeight: "300" },
-  interactionBar: { padding: "18px 20px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  statsGroup: { display: "flex", gap: "18px", alignItems: "center" },
-  statBtn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer", padding: 0 },
+  postText: { color: "#efefef", fontSize: "15px", fontWeight: "300", lineHeight: "1.6" },
+  mediaFrame: { width: "100%", background: "#000", minHeight: "280px", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" },
+  media: { width: "100%", height: "auto", display: "block" },
+  interactionBar: { padding: "20px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  statsGroup: { display: "flex", gap: "20px", alignItems: "center" },
+  statBtn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" },
   statNum: { fontSize: "12px", fontWeight: "800", color: "#00FFFF" },
-  talkBtn: { background: "rgba(0, 255, 255, 0.05)", border: "1px solid rgba(0, 255, 255, 0.2)", borderRadius: "100px", padding: "8px 16px", color: "#00FFFF", fontSize: "9px", fontWeight: "900", letterSpacing: "1px", cursor: "pointer" },
+  talkBtn: { background: "rgba(0, 255, 255, 0.05)", border: "1px solid rgba(0, 255, 255, 0.2)", borderRadius: "100px", padding: "10px 20px", color: "#00FFFF", fontSize: "9px", fontWeight: "900", letterSpacing: "1px", cursor: "pointer" },
   audioPlaceholder: { display: "flex", flexDirection: "column" as const, alignItems: "center" },
-  sonar: { width: "40px", height: "40px", borderRadius: "50%", border: "1px solid #00FFFF" },
-  audioLabel: { color: "#00FFFF", fontSize: "8px", marginTop: "12px", fontWeight: "900", opacity: 0.4 },
-  loader: { color: "#00FFFF", textAlign: "center" as const, marginTop: "200px", fontWeight: "900", letterSpacing: "4px" },
-  emptyState: { display: "flex", flexDirection: "column" as const, alignItems: "center", justifyContent: "center", marginTop: "150px", textAlign: "center" as const },
-  emptyIcon: { fontSize: "40px", marginBottom: "15px" },
-  emptyTitle: { color: "#fff", fontSize: "14px", fontWeight: "900", letterSpacing: "2px", marginBottom: "8px" },
-  emptyText: { color: "rgba(255,255,255,0.3)", fontSize: "11px", marginBottom: "25px" },
-  emptyBtn: { background: "#00FFFF", border: "none", borderRadius: "100px", padding: "12px 24px", color: "#000", fontSize: "10px", fontWeight: "900", cursor: "pointer" }
+  sonar: { width: "50px", height: "50px", borderRadius: "50%", border: "1.5px solid #00FFFF" },
+  audioLabel: { color: "#00FFFF", fontSize: "9px", marginTop: "15px", fontWeight: "900", opacity: 0.5, letterSpacing: "2px" },
+  loader: { color: "#00FFFF", textAlign: "center" as const, marginTop: "200px", fontWeight: "900", letterSpacing: "4px", fontSize: "12px" },
+  emptyState: { textAlign: 'center' as const, marginTop: '150px' },
+  emptyTitle: { color: '#fff', fontSize: '14px', fontWeight: '900', marginTop: '20px' },
+  emptyBtn: { background: '#00FFFF', border: 'none', padding: '10px 20px', borderRadius: '50px', fontWeight: '900', marginTop: '20px', cursor: 'pointer' }
 };
