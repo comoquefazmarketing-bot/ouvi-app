@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import AudioRecorder from "@/components/Audio/AudioRecorder"; // O CORAÇÃO DO PROJETO
+import AudioRecorder from "@/components/dashboard/Threads/AudioRecorder"; // O CORAÇÃO DO PROJETO
 
 const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
