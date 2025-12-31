@@ -11,7 +11,7 @@ export default function NotificationsPage() {
     setLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
     if (user) {
-      // Busca comentários nos posts onde o dono (user_id) é o usuário logado
+      // Busca comentï¿½rios nos posts onde o dono (user_id) ï¿½ o usuï¿½rio logado
       const { data, error } = await supabase
         .from("audio_comments")
         .select("*, posts!inner(user_id)")
@@ -62,7 +62,7 @@ export default function NotificationsPage() {
         ) : (
           <div style={{ textAlign: 'center', marginTop: '100px', color: '#222', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px' }}>
             <Bell size={40} />
-            <p style={{ fontSize: '14px' }}>Silêncio por aqui... Por enquanto.</p>
+            <p style={{ fontSize: '14px' }}>Silï¿½ncio por aqui... Por enquanto.</p>
           </div>
         )}
       </div>

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * PROJETO OUVI — Tela de Login (VISUAL + LÓGICA SUPABASE)
  * Autor: Felipe Makarios
  */
