@@ -14,7 +14,7 @@ export default function SearchPage() {
       <div style={{ position: "relative", marginBottom: "30px" }}>
         <input 
           type="text" 
-          placeholder="O que você quer ouvir?" 
+          placeholder="O que vocÃª quer ouvir?" 
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={{ 
@@ -30,8 +30,8 @@ export default function SearchPage() {
       </div>
 
       <div className="trending-section">
-        <p style={{ color: "#888", marginBottom: "15px", fontSize: "14px" }}>Sugestões para você</p>
-        {/* Aqui os cards aparecerão corretamente agora */}
+        <p style={{ color: "#888", marginBottom: "15px", fontSize: "14px" }}>SugestÃµes para vocÃª</p>
+        {/* Aqui os cards aparecerÃ£o corretamente agora */}
         {trendingPosts.map(post => (
           <PostCard key={post.id} post={post} currentUserId={null} onRefresh={() => {}} />
         ))}

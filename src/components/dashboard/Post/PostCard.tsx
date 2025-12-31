@@ -1,7 +1,7 @@
 /**
- * PROJETO OUVI — Plataforma Social de Voz
+ * PROJETO OUVI â€” Plataforma Social de Voz
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
- * Versão: 5.0 (Core Reestabelecido - Microfone Vivo no Feed)
+ * VersÃ£o: 5.0 (Core Reestabelecido - Microfone Vivo no Feed)
  * Autor: Felipe Makarios
  */
 
@@ -10,7 +10,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import AudioRecorder from "@/components/dashboard/Threads/AudioRecorder"; // O CORAÇÃO DO PROJETO
+import AudioRecorder from "@/components/dashboard/Threads/AudioRecorder"; // O CORAÃ‡ÃƒO DO PROJETO
 
 const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
@@ -19,7 +19,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
   const [hasShared, setHasShared] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  // Varredura de Mídia: Aceita media_url, video_url ou image_url
+  // Varredura de MÃ­dia: Aceita media_url, video_url ou image_url
   const mediaUrl = post.media_url || post.video_url || post.image_url;
   const isVideo = post.type === 'video' || !!post.video_url;
   
@@ -66,7 +66,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
           backgroundImage: profile.avatar_url ? `url(${profile.avatar_url})` : 'none',
           display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
-          {!profile.avatar_url && "👤"}
+          {!profile.avatar_url && "ðŸ‘¤"}
         </div>
         <div style={styles.userInfo}>
           <span style={styles.username}>@{profile.username}</span>
@@ -75,7 +75,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
 
         {currentUserId === post.user_id && post.user_id !== null && (
           <div style={{ marginLeft: "auto", position: "relative" }}>
-            <button onClick={() => setShowMenu(!showMenu)} style={styles.moreBtn}>•••</button>
+            <button onClick={() => setShowMenu(!showMenu)} style={styles.moreBtn}>â€¢â€¢â€¢</button>
             <AnimatePresence>
               {showMenu && (
                 <>
@@ -108,7 +108,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
           isVideo ? (
             <video src={mediaUrl} style={styles.media} autoPlay muted loop playsInline />
           ) : (
-            <img src={mediaUrl} style={styles.media} alt="Conteúdo" />
+            <img src={mediaUrl} style={styles.media} alt="ConteÃºdo" />
           )
         ) : (
           <div style={styles.audioOnly}>
@@ -126,10 +126,10 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
       >
         <div style={styles.previewHeader}>
           <div style={styles.liveIndicator} />
-          <span style={styles.previewTitle}>PRÉVIA DA CONVERSA</span>
+          <span style={styles.previewTitle}>PRÃ‰VIA DA CONVERSA</span>
         </div>
         <div style={styles.previewText}>
-          Toque para ouvir o que estão falando sobre isso...
+          Toque para ouvir o que estÃ£o falando sobre isso...
         </div>
       </motion.div>
 
@@ -137,7 +137,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
         <div style={styles.reactionGroup}>
           <motion.button whileTap={{ scale: 0.8 }} onClick={handleLike} style={styles.iconBtn}>
             <span style={{ color: hasLiked ? "#00FFFF" : "#fff", fontSize: "18px" }}>
-              {hasLiked ? "❤️" : "🤍"}
+              {hasLiked ? "â¤ï¸" : "ðŸ¤"}
             </span>
             <span style={{...styles.counter, color: hasLiked ? "#00FFFF" : "rgba(255,255,255,0.5)"}}>
               {likes}
@@ -145,17 +145,17 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
           </motion.button>
 
           <motion.button whileTap={{ scale: 0.8 }} style={styles.iconBtn} onClick={() => window.location.href = `/dashboard/post/${post.id}`}>
-            <span style={{fontSize: "18px"}}>💬</span>
+            <span style={{fontSize: "18px"}}>ðŸ’¬</span>
             <span style={styles.counter}>{post.comment_count || 0}</span>
           </motion.button>
 
-          {/* MICROFONE (CORE): Imputado aqui para gravação direta no feed */}
+          {/* MICROFONE (CORE): Imputado aqui para gravaÃ§Ã£o direta no feed */}
           <div style={styles.micWrapper}>
              <AudioRecorder postId={post.id} onUploadComplete={onRefresh} />
           </div>
 
           <motion.button whileTap={{ scale: 0.8 }} onClick={handleShare} style={styles.iconBtn}>
-            <span style={{ fontSize: "18px", color: hasShared ? "#00FFFF" : "#fff" }}>⚡</span>
+            <span style={{ fontSize: "18px", color: hasShared ? "#00FFFF" : "#fff" }}>âš¡</span>
             <span style={{...styles.counter, color: hasShared ? "#00FFFF" : "rgba(255,255,255,0.5)"}}>
               {shares}
             </span>

@@ -21,9 +21,9 @@ export default function ProfilePage() {
       </div>
 
       <div className="posts-section">
-        <p style={{ color: "#888", marginBottom: "15px", fontSize: "14px" }}>Minhas publicações</p>
+        <p style={{ color: "#888", marginBottom: "15px", fontSize: "14px" }}>Minhas publicaÃ§Ãµes</p>
         {userPosts.length === 0 ? (
-          <p style={{ textAlign: "center", color: "#444", marginTop: "40px" }}>Nenhuma publicação ainda.</p>
+          <p style={{ textAlign: "center", color: "#444", marginTop: "40px" }}>Nenhuma publicaÃ§Ã£o ainda.</p>
         ) : (
           userPosts.map(post => (
             <PostCard key={post.id} post={post} currentUserId={null} onRefresh={() => {}} />
