@@ -1,225 +1,241 @@
 ﻿/**
- * PROJETO OUVI — Dashboard Consolidado com Core de Voz Injetado
+ * PROJETO OUVI — Plataforma Social de Voz
  * Local: E:\OUVI\ouvi-app\src\app\dashboard\page.tsx
+ * Versão: 5.1 (Ajuste de Visual Elite + Core de Voz)
  */
 
 "use client";
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart, MessageCircle } from 'lucide-react';
-
-// CAMINHOS DE NAVEGAÇÃO
-import ThreadDrawer from "@/components/dashboard/Threads/ThreadDrawer";
-import TabBar from "@/components/dashboard/Navigation/TabBar"; 
-import ActionDrawer from "@/components/dashboard/Navigation/ActionDrawer"; 
+import AudioRecorder from "@/components/Audio/AudioRecorder"; 
 
 const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId: string | null, onRefresh: () => void }) => {
   const [likes, setLikes] = useState(post.likes || 0);
+  const [shares, setShares] = useState(post.shares || 0);
   const [hasLiked, setHasLiked] = useState(false);
-  const [isThreadOpen, setIsThreadOpen] = useState(false);
-  const [recording, setRecording] = useState(false);
+  const [hasShared, setHasShared] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
 
-  // REFERÊNCIAS DO HARDWARE (EXTRAÍDAS DO REACTIONBAR)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const mediaUrl = post.media_url || post.video_url || post.image_url;
+  const isVideo = post.type === 'video' || !!post.video_url;
+  const profile = post.profiles || { username: "membro_ouvi", avatar_url: null };
 
-  const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
-
-  // --- LÓGICA DE GRAVAÇÃO (CORE NATIVO) ---
-  const startRecording = async (e: any) => {
-    e.stopPropagation();
-    if (recording) return;
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-      recorder.ondataavailable = (ev) => chunksRef.current.push(ev.data);
-      
-      recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const fileName = `${Date.now()}-${currentUserId}.webm`;
-        const path = `feed/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage.from("audio-comments").upload(path, blob);
-        
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
-          
-          await supabase.from("audio_comments").insert({
-            post_id: post.id,
-            audio_url: publicUrl,
-            user_id: currentUserId,
-            username: "membro",
-            content: "🎙️ Voz do Feed",
-            reactions: { loved_by: [], energy: 0 }
-          });
-          
-          if (onRefresh) onRefresh();
-        }
-        stream.getTracks().forEach(t => t.stop());
-      };
-      
-      recorder.start();
-      setRecording(true);
-    } catch (err) { console.warn("Acesso ao microfone negado."); }
+  const handleDeletePost = async () => {
+    if (!confirm("Deseja apagar sua voz permanentemente?")) return;
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+    if (!error) onRefresh();
   };
 
-  const stopRecording = (e: any) => {
-    e.stopPropagation();
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
+  const handleLike = async () => {
+    if (hasLiked) return;
+    setHasLiked(true);
+    setLikes(prev => prev + 1);
+    await supabase.from("posts").update({ likes: likes + 1 }).eq("id", post.id);
+  };
+
+  const handleShare = async () => {
+    if (!hasShared) {
+      setShares(prev => prev + 1);
+      setHasShared(true);
+      await supabase.from("posts").update({ shares: shares + 1 }).eq("id", post.id);
+    }
+    if (navigator.share) {
+      navigator.share({ title: 'OUVI', url: `${window.location.origin}/dashboard/post/${post.id}` });
+    } else {
+      navigator.clipboard.writeText(`${window.location.origin}/dashboard/post/${post.id}`);
     }
   };
 
-  const handleLike = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (hasLiked) return;
-    setHasLiked(true);
-    setLikes((prev: number) => prev + 1);
-    await supabase.from("posts").update({ likes: (post.likes || 0) + 1 }).eq("id", post.id);
-  };
-
   return (
-    <>
-      <motion.div initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} style={styles.card}>
-        <div style={styles.userRow}>
-          <div style={{...styles.avatar, backgroundImage: profile.avatar_url ? `url(${profile.avatar_url})` : 'none'}} />
-          <div style={styles.userInfo}>
-            <span style={styles.username}>@{profile.username}</span>
-            <span style={styles.time}>OUVINDO AGORA</span>
-          </div>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true }}
+      style={styles.card}
+    >
+      {/* Header do Post */}
+      <div style={styles.userRow}>
+        <div style={{
+          ...styles.avatar, 
+          backgroundImage: profile.avatar_url ? `url(${profile.avatar_url})` : 'none',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          {!profile.avatar_url && "👤"}
+        </div>
+        <div style={styles.userInfo}>
+          <span style={styles.username}>@{profile.username}</span>
+          <span style={styles.time}>transmitindo agora</span>
         </div>
 
-        <div style={styles.mediaFrame}>
-          {post.video_url ? (
-            <video src={post.video_url} style={styles.media} autoPlay muted loop playsInline />
-          ) : post.image_url ? (
-            <img src={post.image_url} style={styles.media} alt="Post" />
+        {currentUserId === post.user_id && (
+          <div style={{ marginLeft: "auto", position: "relative" }}>
+            <button onClick={() => setShowMenu(!showMenu)} style={styles.moreBtn}>•••</button>
+            <AnimatePresence>
+              {showMenu && (
+                <>
+                  <div style={styles.overlay} onClick={() => setShowMenu(false)} />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.9 }} 
+                    animate={{ opacity: 1, scale: 1 }} 
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    style={styles.dropdown}
+                  >
+                    <div onClick={handleDeletePost} style={styles.deleteOption}>Apagar Post</div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
+
+      {/* Conteúdo de Texto */}
+      {(post.content || post.caption) && (
+        <div style={{ padding: "0 20px 16px 20px" }}>
+          <p style={{ color: "#efefef", fontSize: "15px", lineHeight: "1.5", fontWeight: "300" }}>
+            {post.content || post.caption}
+          </p>
+        </div>
+      )}
+
+      {/* Mídia Principal */}
+      <div style={styles.mediaContainer}>
+        {mediaUrl ? (
+          isVideo ? (
+            <video src={mediaUrl} style={styles.media} autoPlay muted loop playsInline />
           ) : (
-            <div style={styles.audioPlaceholder}>
-               <span style={{color: "#00f2fe", fontSize: "10px", fontWeight: "bold", letterSpacing: "2px"}}>SOM ATIVO</span>
-            </div>
-          )}
-        </div>
-
-        <div style={styles.interactionBar}>
-          <div style={styles.iconGroup}>
-            <button onClick={handleLike} style={styles.iconBtn}>
-              <Heart size={22} color={hasLiked ? "#ff4444" : "#666"} fill={hasLiked ? "#ff4444" : "none"} />
-            </button>
-            <button onClick={() => setIsThreadOpen(true)} style={styles.iconBtn}>
-              <MessageCircle size={22} color="#666" />
-            </button>
-            
-            <div style={styles.micWrapper}>
-               <AnimatePresence>
-                 {recording && (
-                   <motion.div 
-                     initial={{ scale: 1, opacity: 0.6 }} 
-                     animate={{ scale: 2.5, opacity: 0 }} 
-                     transition={{ repeat: Infinity, duration: 1 }} 
-                     style={styles.wave} 
-                   />
-                 )}
-               </AnimatePresence>
-               <button 
-                 onPointerDown={startRecording} 
-                 onPointerUp={stopRecording}
-                 style={{
-                   ...styles.micBtn, 
-                   color: recording ? "#ff4444" : "#666",
-                   transform: recording ? "scale(1.3)" : "scale(1)"
-                 }}
-               >
-                 <span style={{ fontSize: "20px" }}>🎙️</span>
-               </button>
-            </div>
+            <img src={mediaUrl} style={styles.media} alt="Conteúdo" />
+          )
+        ) : (
+          <div style={styles.audioOnly}>
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ repeat: Infinity, duration: 2 }} style={styles.pulseIcon}>
+              VIVE O SOM
+            </motion.div>
           </div>
-          <button onClick={() => setIsThreadOpen(true)} style={styles.talkBtn}>O QUE ESTÃO FALANDO...</button>
+        )}
+      </div>
+
+      {/* Prévia da Conversa (Thread) */}
+      <motion.div 
+        onClick={() => window.location.href = `/dashboard/post/${post.id}`}
+        whileTap={{ scale: 0.98 }}
+        style={styles.previewContainer}
+      >
+        <div style={styles.previewHeader}>
+          <div style={styles.liveIndicator} />
+          <span style={styles.previewTitle}>PRÉVIA DA CONVERSA</span>
         </div>
+        <div style={styles.previewText}>Toque para ouvir as vozes sobre isso...</div>
       </motion.div>
-      {isThreadOpen && <ThreadDrawer post={post} onClose={() => setIsThreadOpen(false)} />}
-    </>
+
+      {/* Barra de Interação com Microfone Core */}
+      <div style={styles.interactionArea}>
+        <div style={styles.reactionGroup}>
+          <motion.button whileTap={{ scale: 0.8 }} onClick={handleLike} style={styles.iconBtn}>
+            <span style={{ color: hasLiked ? "#00FFFF" : "#fff", fontSize: "18px" }}>{hasLiked ? "❤️" : "🤍"}</span>
+            <span style={{...styles.counter, color: hasLiked ? "#00FFFF" : "rgba(255,255,255,0.5)"}}>{likes}</span>
+          </motion.button>
+
+          <motion.button whileTap={{ scale: 0.8 }} style={styles.iconBtn} onClick={() => window.location.href = `/dashboard/post/${post.id}`}>
+            <span style={{fontSize: "18px"}}>💬</span>
+            <span style={styles.counter}>{post.comment_count || 0}</span>
+          </motion.button>
+
+          <div style={styles.micWrapper}>
+             <AudioRecorder postId={post.id} onUploadComplete={onRefresh} />
+          </div>
+
+          <motion.button whileTap={{ scale: 0.8 }} onClick={handleShare} style={styles.iconBtn}>
+            <span style={{ fontSize: "18px", color: hasShared ? "#00FFFF" : "#fff" }}>⚡</span>
+            <span style={{...styles.counter, color: hasShared ? "#00FFFF" : "rgba(255,255,255,0.5)"}}>{shares}</span>
+          </motion.button>
+        </div>
+      </div>
+    </motion.div>
   );
 };
 
-export default function DashboardPage() {
+export default function Feed() {
   const [posts, setPosts] = useState<any[]>([]);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const fetchFeed = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    setCurrentUserId(user?.id || null);
-    const { data } = await supabase
-      .from("posts")
-      .select(`*, profiles!left (username, avatar_url)`)
-      .order("created_at", { ascending: false });
-    setPosts(data || []);
+  const fetchFeed = async (showLoading = true) => {
+    try {
+      if (showLoading) setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      setUserId(user?.id || null);
+
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`*, profiles!left (username, avatar_url)`)
+        .order("created_at", { ascending: false });
+
+      if (!error) setPosts(data || []);
+    } catch (err) {
+      console.error("Erro no Feed:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => {
-    fetchFeed();
-    const channel = supabase.channel('feed-view')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchFeed())
+  useEffect(() => { 
+    fetchFeed(); 
+    const channel = supabase.channel('feed-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'posts' }, () => fetchFeed(false))
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   return (
-    // Removido 'fixed' e 'overflow-hidden' para permitir o scroll natural do feed
-    <div className="min-h-screen bg-black flex flex-col">
-      {/* Header Fixo no topo com desfoque */}
-      <div className="sticky top-0 w-full flex justify-center py-6 border-b border-white/5 bg-black/80 backdrop-blur-md z-50">
-        <span className="text-white font-black tracking-[0.5em] text-[12px] italic">OUVI</span>
-      </div>
-
-      {/* Área do Feed com preenchimento para não sumir atrás da TabBar */}
-      <div className="flex-1 px-4 pt-4 pb-40">
-        <div className="max-w-[500px] mx-auto space-y-8">
-          {posts.map(p => (
-            <PostCard 
-              key={p.id} 
-              post={p} 
-              currentUserId={currentUserId} 
-              onRefresh={fetchFeed} 
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* TabBar fixa no rodapé com camada superior */}
-      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[100] pointer-events-none">
-        <div className="pointer-events-auto px-6 w-full flex justify-center">
-          <TabBar onPlusClick={() => setIsDrawerOpen(true)} />
-        </div>
-      </div>
-
-      <ActionDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
+    <div style={styles.container}>
+      <div style={styles.ambientGlow} />
+      <AnimatePresence>
+        {loading ? (
+          <motion.div key="l" style={styles.status}>SINTONIZANDO...</motion.div>
+        ) : (
+          <div style={styles.list}>
+            {posts.map((post) => (
+              <PostCard key={post.id} post={post} currentUserId={userId} onRefresh={() => fetchFeed(false)} />
+            ))}
+            {/* Espaçador final para a TabBar não cobrir o último post */}
+            <div style={{ height: "120px" }} />
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
 
 const styles = {
-  card: { background: "#080808", borderRadius: "24px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.03)" },
-  userRow: { padding: "12px 15px", display: "flex", alignItems: "center", gap: "10px" },
-  avatar: { width: "32px", height: "32px", borderRadius: "50%", backgroundSize: "cover", border: "1px solid #00f2fe" },
+  container: { padding: "20px 16px", background: "#000", minHeight: "100vh", position: "relative" as const, overflowX: "hidden" as const },
+  ambientGlow: { position: "absolute" as const, top: "-10%", left: "50%", transform: "translateX(-50%)", width: "100%", height: "400px", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, transparent 70%)", pointerEvents: "none" as const },
+  list: { display: "flex", flexDirection: "column" as const, gap: "24px", maxWidth: "480px", margin: "0 auto", position: "relative" as const, zIndex: 1 },
+  card: { background: "rgba(12, 12, 12, 0.8)", backdropFilter: "blur(20px)", borderRadius: "32px", border: "1px solid rgba(255, 255, 255, 0.06)", overflow: "hidden", boxShadow: "0 20px 40px rgba(0, 0, 0, 0.4)" },
+  userRow: { padding: "18px", display: "flex", alignItems: "center", gap: "12px" },
+  avatar: { width: "42px", height: "42px", borderRadius: "50%", backgroundSize: "cover", backgroundPosition: "center", border: "1.5px solid #00FFFF" },
   userInfo: { display: "flex", flexDirection: "column" as const },
-  username: { color: "#fff", fontSize: "12px", fontWeight: "900" as const },
-  time: { color: "#00f2fe", fontSize: "8px", fontWeight: "bold" as const },
-  mediaFrame: { width: "100%", aspectRatio: "1/1", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" },
+  username: { color: "#fff", fontSize: "13px", fontWeight: "900", letterSpacing: "0.5px" },
+  time: { color: "#00FFFF", fontSize: "8px", fontWeight: "bold", opacity: 0.6, textTransform: "uppercase" as const },
+  moreBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "16px" },
+  overlay: { position: "fixed" as const, inset: 0, zIndex: 90 },
+  dropdown: { position: "absolute" as const, top: "30px", right: "0", width: "140px", background: "#111", borderRadius: "12px", border: "1px solid #222", zIndex: 100 },
+  deleteOption: { padding: "12px", color: "#ff4444", fontSize: "11px", fontWeight: "bold" as const, cursor: "pointer", textAlign: "center" as const },
+  mediaContainer: { width: "100%", background: "#050505", minHeight: "300px", display: "flex", alignItems: "center", justifyContent: "center" },
   media: { width: "100%", height: "100%", objectFit: "cover" as const },
-  interactionBar: { padding: "12px 15px", display: "flex", justifyContent: "space-between", alignItems: "center" },
-  iconGroup: { display: "flex", gap: "18px", alignItems: "center" },
-  iconBtn: { background: "none", border: "none", cursor: "pointer" },
-  micWrapper: { position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" },
-  micBtn: { background: "none", border: "none", cursor: "pointer", transition: "0.2s" },
-  wave: { position: "absolute" as const, width: "30px", height: "30px", borderRadius: "50%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as const },
-  talkBtn: { background: "rgba(0,242,254,0.05)", padding: "8px 16px", borderRadius: "20px", color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, border: "1px solid rgba(0,242,254,0.15)" },
-  audioPlaceholder: { display: "flex", alignItems: "center", justifyContent: "center" }
+  audioOnly: { height: "200px", display: "flex", alignItems: "center", justifyContent: "center", color: "#00FFFF" },
+  pulseIcon: { fontSize: "10px", border: "1px solid #00FFFF", padding: "6px 15px", borderRadius: "100px", fontWeight: "900" as const, letterSpacing: "2px" },
+  previewContainer: { margin: "15px 20px", padding: "12px", background: "rgba(255, 255, 255, 0.02)", borderRadius: "18px", border: "1px solid rgba(255, 255, 255, 0.05)" },
+  previewHeader: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "4px" },
+  liveIndicator: { width: "5px", height: "5px", borderRadius: "50%", background: "#00f2fe", boxShadow: "0 0 8px #00f2fe" },
+  previewTitle: { fontSize: "8px", fontWeight: "900", color: "rgba(0, 242, 254, 0.7)", letterSpacing: "1px" },
+  previewText: { fontSize: "11px", color: "rgba(255, 255, 255, 0.4)", fontStyle: "italic" },
+  interactionArea: { padding: "15px 20px", display: "flex", justifyContent: "center", borderTop: "1px solid rgba(255,255,255,0.03)" },
+  reactionGroup: { display: "flex", gap: "35px", alignItems: "center" },
+  iconBtn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" },
+  micWrapper: { transform: "scale(1.1)" },
+  counter: { color: "rgba(255,255,255,0.4)", fontSize: "12px", fontWeight: "700" },
+  status: { color: "#00f2fe", textAlign: "center" as const, marginTop: "150px", letterSpacing: "4px", fontWeight: "900", fontSize: "10px" }
 };
