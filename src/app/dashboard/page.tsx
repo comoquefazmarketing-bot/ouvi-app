@@ -27,7 +27,7 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
 
   const profile = post.profiles || { username: "pioneiro_ouvi", avatar_url: null };
 
-  // --- LÓGICA DE GRAVAÇÃO (CÓPIA REVERSA DO CORE) ---
+  // --- LÓGICA DE GRAVAÇÃO (CORE NATIVO) ---
   const startRecording = async (e: any) => {
     e.stopPropagation();
     if (recording) return;
@@ -44,13 +44,11 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
         const fileName = `${Date.now()}-${currentUserId}.webm`;
         const path = `feed/${fileName}`;
         
-        // Upload para o bucket audio-comments conforme sua estrutura no Supabase
         const { error: uploadError } = await supabase.storage.from("audio-comments").upload(path, blob);
         
         if (!uploadError) {
           const { data: { publicUrl } } = supabase.storage.from("audio-comments").getPublicUrl(path);
           
-          // Salva a interação de voz no banco
           await supabase.from("audio_comments").insert({
             post_id: post.id,
             audio_url: publicUrl,
@@ -118,7 +116,6 @@ const PostCard = ({ post, currentUserId, onRefresh }: { post: any, currentUserId
               <MessageCircle size={22} color="#666" />
             </button>
             
-            {/* MICROFONE CORE INJETADO (Hardware Ativo) */}
             <div style={styles.micWrapper}>
                <AnimatePresence>
                  {recording && (
@@ -175,12 +172,15 @@ export default function DashboardPage() {
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black flex flex-col overflow-hidden">
-      <div className="flex justify-center py-6 border-b border-white/5 bg-black/50 backdrop-blur-md z-50">
+    // Removido 'fixed' e 'overflow-hidden' para permitir o scroll natural do feed
+    <div className="min-h-screen bg-black flex flex-col">
+      {/* Header Fixo no topo com desfoque */}
+      <div className="sticky top-0 w-full flex justify-center py-6 border-b border-white/5 bg-black/80 backdrop-blur-md z-50">
         <span className="text-white font-black tracking-[0.5em] text-[12px] italic">OUVI</span>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 pt-4 pb-40">
+      {/* Área do Feed com preenchimento para não sumir atrás da TabBar */}
+      <div className="flex-1 px-4 pt-4 pb-40">
         <div className="max-w-[500px] mx-auto space-y-8">
           {posts.map(p => (
             <PostCard 
@@ -193,8 +193,11 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="fixed bottom-6 w-full flex justify-center px-6 z-[100]">
-        <TabBar onPlusClick={() => setIsDrawerOpen(true)} />
+      {/* TabBar fixa no rodapé com camada superior */}
+      <div className="fixed bottom-8 left-0 right-0 flex justify-center z-[100] pointer-events-none">
+        <div className="pointer-events-auto px-6 w-full flex justify-center">
+          <TabBar onPlusClick={() => setIsDrawerOpen(true)} />
+        </div>
       </div>
 
       <ActionDrawer isOpen={isDrawerOpen} onClose={() => setIsDrawerOpen(false)} />
@@ -207,8 +210,8 @@ const styles = {
   userRow: { padding: "12px 15px", display: "flex", alignItems: "center", gap: "10px" },
   avatar: { width: "32px", height: "32px", borderRadius: "50%", backgroundSize: "cover", border: "1px solid #00f2fe" },
   userInfo: { display: "flex", flexDirection: "column" as const },
-  username: { color: "#fff", fontSize: "12px", fontWeight: "900" },
-  time: { color: "#00f2fe", fontSize: "8px", fontWeight: "bold" },
+  username: { color: "#fff", fontSize: "12px", fontWeight: "900" as const },
+  time: { color: "#00f2fe", fontSize: "8px", fontWeight: "bold" as const },
   mediaFrame: { width: "100%", aspectRatio: "1/1", background: "#000", display: "flex", alignItems: "center", justifyContent: "center" },
   media: { width: "100%", height: "100%", objectFit: "cover" as const },
   interactionBar: { padding: "12px 15px", display: "flex", justifyContent: "space-between", alignItems: "center" },
@@ -216,7 +219,7 @@ const styles = {
   iconBtn: { background: "none", border: "none", cursor: "pointer" },
   micWrapper: { position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" },
   micBtn: { background: "none", border: "none", cursor: "pointer", transition: "0.2s" },
-  wave: { position: "absolute" as const, width: "30px", height: "30px", borderRadius: "50%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as "none" },
-  talkBtn: { background: "rgba(0,242,254,0.05)", padding: "8px 16px", borderRadius: "20px", color: "#00f2fe", fontSize: "9px", fontWeight: "900", border: "1px solid rgba(0,242,254,0.15)" },
+  wave: { position: "absolute" as const, width: "30px", height: "30px", borderRadius: "50%", border: "2px solid rgba(255, 0, 0, 0.4)", pointerEvents: "none" as const },
+  talkBtn: { background: "rgba(0,242,254,0.05)", padding: "8px 16px", borderRadius: "20px", color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, border: "1px solid rgba(0,242,254,0.15)" },
   audioPlaceholder: { display: "flex", alignItems: "center", justifyContent: "center" }
 };
