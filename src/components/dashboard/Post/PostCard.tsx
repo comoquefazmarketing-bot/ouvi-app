@@ -1,6 +1,6 @@
 ﻿/**
  * PROJETO OUVI – PostCard ELITE (Sintonizado 2026)
- * Ajuste: Prévia de áudio nas vozes e Blindagem Total
+ * Ajuste: Barra de Reação Sensorial Discreta e Blindagem de Layout
  */
 
 "use client";
@@ -102,7 +102,6 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
                   <span style={styles.previewUser}>@{comm.profiles?.username || comm.username || "membro"}</span>
                 </div>
                 <p style={styles.previewText}>
-                  {/* Se houver audio_url no comentário, mostra o ícone de voz na prévia */}
                   {comm.audio_url ? "🔊 Voz enviada..." : (comm.content || "Voz sintonizada...")}
                 </p>
               </motion.div>
@@ -111,11 +110,14 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
           </div>
         )}
 
-        <ReactionBar 
-          postId={post.id} 
-          initialReactions={post.reactions}
-          onOpenThread={() => onOpenThread(post)}
-        />
+        {/* BARRA DE REAÇÃO – Agora integrada de forma discreta no final do card */}
+        <div style={styles.reactionContainer}>
+          <ReactionBar 
+            postId={post.id} 
+            initialReactions={post.reactions}
+            onOpenThread={() => onOpenThread(post)}
+          />
+        </div>
       </div>
     </motion.div>
   );
@@ -143,5 +145,13 @@ const styles = {
   previewHeader: { display: "flex", marginBottom: "2px" },
   previewUser: { color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, textTransform: "uppercase" as const },
   previewText: { color: "#888", fontSize: "11px", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" },
-  viewMore: { color: "#333", fontSize: "8px", fontWeight: "900" as const, textAlign: "center" as const, marginTop: "4px", letterSpacing: "1px" }
+  viewMore: { color: "#333", fontSize: "8px", fontWeight: "900" as const, textAlign: "center" as const, marginTop: "4px", letterSpacing: "1px" },
+  // ESTILO ADICIONADO PARA BLINDAR A BARRA
+  reactionContainer: { 
+    display: "flex", 
+    justifyContent: "flex-end", 
+    marginTop: "10px", 
+    paddingTop: "10px", 
+    borderTop: "1px solid rgba(255,255,255,0.03)" 
+  }
 };
