@@ -1,11 +1,11 @@
 ﻿/**
  * PROJETO OUVI – PostCard CORE SENSORIAL (2026)
- * Foco: Mega experiência no botão de conversão (Core Business)
- * Status: Sintonizado para máxima conversão
+ * Gamificação: Progressão Elétrica (Yellow Voltage)
+ * Status: Sintonizado para máxima conversão e impacto visual
  */
 
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import ReactionBar from "@/components/dashboard/Threads/ReactionBar";
 import { motion, AnimatePresence } from "framer-motion";
@@ -17,6 +17,15 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
   }, []);
 
+  // LÓGICA DE INTENSIDADE (GAMIFICAÇÃO) [cite: 2026-01-01]
+  const zapCount = useMemo(() => 
+    (post.reactions || []).filter((r: any) => r.type === 'zap').length, 
+    [post.reactions]
+  );
+  
+  const MAX_ZAP = 50;
+  const intensity = Math.min(zapCount / MAX_ZAP, 1); // Ratio de 0 a 1
+
   const previewComments = (post.audio_comments || []).slice(0, 4);
 
   return (
@@ -24,8 +33,28 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
       initial={{ opacity: 0, y: 15 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      style={styles.card}
+      style={{
+        ...styles.card,
+        // Borda e brilho crescem com o número de raios
+        border: `1px solid rgba(255, 215, 0, ${0.1 + intensity * 0.6})`,
+        boxShadow: zapCount > 0 
+          ? `0 0 ${intensity * 30}px rgba(255, 215, 0, ${intensity * 0.4})` 
+          : "none"
+      }}
+      animate={intensity === 1 ? {
+        x: [-0.5, 0.5, -0.5, 0.5, 0], // Tremor de sobrecarga no nível 50
+        transition: { repeat: Infinity, duration: 0.1 }
+      } : {}}
     >
+      {/* CAMADA DE SOBRECARGA (Aparece no MAX) */}
+      {intensity === 1 && (
+        <motion.div 
+          style={styles.electricOverlay}
+          animate={{ opacity: [0.05, 0.15, 0.05] }}
+          transition={{ duration: 0.2, repeat: Infinity }}
+        />
+      )}
+
       <div style={styles.header}>
         <div style={styles.userInfo}>
           <img src={post.profiles?.avatar_url || "/default-avatar.png"} style={styles.avatar} alt="User" />
@@ -63,41 +92,37 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
       {/* FOOTER: A MÁGICA SENSORIAL SINTONIZADA */}
       <div style={styles.footer}>
         <div style={styles.reactionSide}>
+          {/* ReactionBar agora focado nos 4 emojis dentro da pílula */}
           <ReactionBar postId={post.id} initialReactions={post.reactions} onOpenThread={() => onOpenThread(post)} />
           
-          {/* ÍCONE DE BALÃO À ESQUERDA (Integrado à estética) */}
           <motion.div 
-            whileHover={{ scale: 1.25, color: "#00f2fe" }} 
+            whileHover={{ scale: 1.25, color: intensity > 0.5 ? "#FFD700" : "#00f2fe" }} 
             onClick={() => onOpenThread(post)} 
             style={styles.chatIconWrapper}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
             </svg>
           </motion.div>
         </div>
         
-        {/* BOTÃO CORE: EXPERIÊNCIA MAGNÉTICA APRIMORADA */}
+        {/* BOTÃO CORE: Reage à eletricidade */}
         <motion.button 
           onClick={() => onOpenThread(post)} 
-          style={styles.coreBtn}
+          style={{
+            ...styles.coreBtn,
+            color: intensity > 0.5 ? "#FFD700" : "#00f2fe",
+            borderColor: intensity > 0.5 ? "rgba(255, 215, 0, 0.4)" : "rgba(0, 242, 254, 0.25)",
+            background: intensity > 0.5 ? "rgba(255, 215, 0, 0.05)" : "rgba(0, 242, 254, 0.04)"
+          }}
           animate={{ 
-            boxShadow: [
-              "0 0 4px rgba(0, 242, 254, 0.1)", 
-              "0 0 16px rgba(0, 242, 254, 0.4)", 
-              "0 0 4px rgba(0, 242, 254, 0.1)"
-            ],
-            opacity: [0.9, 1, 0.9]
+            boxShadow: intensity === 1 
+              ? ["0 0 10px #FFD700", "0 0 20px #FFD700", "0 0 10px #FFD700"] 
+              : ["0 0 4px rgba(0, 242, 254, 0.1)", "0 0 16px rgba(0, 242, 254, 0.4)", "0 0 4px rgba(0, 242, 254, 0.1)"]
           }}
-          transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
-          whileHover={{ 
-            scale: 1.04, 
-            backgroundColor: "rgba(0, 242, 254, 0.12)",
-            letterSpacing: "1.2px"
-          }}
-          whileTap={{ scale: 0.96 }}
+          transition={{ repeat: Infinity, duration: intensity === 1 ? 0.5 : 2.5 }}
         >
-          O QUE ESTÃO FALANDO...
+          {intensity === 1 ? "SINAL EMERGENCIAL" : "O QUE ESTÃO FALANDO..."}
         </motion.button>
       </div>
     </motion.div>
@@ -105,7 +130,8 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
 }
 
 const styles = {
-  card: { background: "#050505", borderRadius: "28px", border: "1px solid #111", marginBottom: "25px", overflow: "hidden" },
+  card: { background: "#050505", borderRadius: "28px", marginBottom: "25px", overflow: "hidden", position: "relative" as const, transition: "border 0.3s ease" },
+  electricOverlay: { position: "absolute" as const, top: 0, left: 0, right: 0, bottom: 0, background: "rgba(255, 215, 0, 0.03)", pointerEvents: "none" as const, zIndex: 1 },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" },
   userInfo: { display: "flex", alignItems: "center", gap: "10px" },
   avatar: { width: "36px", height: "36px", borderRadius: "50%", border: "1px solid #222", objectFit: "cover" as const },
@@ -122,13 +148,12 @@ const styles = {
   previewBox: { background: "rgba(255, 255, 255, 0.02)", padding: "8px 12px", borderRadius: "12px", marginBottom: "6px", border: "1px solid rgba(255,255,255,0.03)" },
   previewUser: { color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const },
   previewText: { color: "#666", fontSize: "10px" },
-  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", borderTop: "1px solid #0d0d0d" },
-  reactionSide: { display: "flex", alignItems: "center", gap: "20px" },
+  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderTop: "1px solid #0d0d0d" },
+  reactionSide: { display: "flex", alignItems: "center", gap: "15px" },
   chatIconWrapper: { color: "#444", cursor: "pointer", display: "flex", alignItems: "center", transition: "all 0.3s ease" },
   coreBtn: { 
-    background: "rgba(0, 242, 254, 0.04)", 
-    border: "1px solid rgba(0, 242, 254, 0.25)", 
-    color: "#00f2fe", 
+    borderWidth: "1px",
+    borderStyle: "solid",
     fontSize: "9px", 
     fontWeight: "900" as const, 
     cursor: "pointer", 
