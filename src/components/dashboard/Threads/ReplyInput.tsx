@@ -32,6 +32,11 @@ export default function ReplyInput({ postId, onRefresh }: any) {
 
   return (
     <div style={styles.container}>
+      <style>{`
+        ::-webkit-scrollbar { display: none; }
+        body { -ms-overflow-style: none; scrollbar-width: none; overflow-x: hidden; }
+      `}</style>
+      
       <div style={styles.inputInner}>
         <input
           placeholder="O QUE VOCÊ TEM A DIZER?..."
@@ -49,21 +54,21 @@ export default function ReplyInput({ postId, onRefresh }: any) {
           )}
 
           <div style={styles.micPosition}>
-            {/* O BOTÃO AGORA É UM SÓ E CONTROLA TUDO */}
             <motion.div 
               onPointerDown={() => setIsRecording(true)} 
               onPointerUp={() => setIsRecording(false)}
               onPointerLeave={() => isRecording && setIsRecording(false)}
-              animate={isRecording ? { scale: 1.3 } : { scale: 1 }}
+              animate={isRecording ? { scale: 1.15 } : { scale: 1 }}
               style={{
                 ...styles.recorderWrapper,
-                background: isRecording ? "#ff4444" : "#00f2fe",
-                boxShadow: isRecording ? "0 0 30px rgba(255, 68, 68, 0.6)" : "0 4px 15px rgba(0,0,0,0.2)"
+                background: isRecording ? "#ff4444" : "rgba(0, 242, 254, 0.1)",
+                boxShadow: isRecording ? "0 0 25px rgba(255, 68, 68, 0.5)" : "none",
+                border: isRecording ? "none" : "1px solid rgba(0, 242, 254, 0.2)"
               }}
             >
               <AudioRecorder 
                 postId={postId} 
-                triggerRecord={isRecording} // Novo prop para ligar o motor
+                triggerRecord={isRecording}
                 onUploadComplete={() => {
                   setIsRecording(false);
                   if (onRefresh) onRefresh();
@@ -78,31 +83,39 @@ export default function ReplyInput({ postId, onRefresh }: any) {
 }
 
 const styles = {
-  container: { padding: "10px 15px 25px", width: "100%", background: "transparent" }, // Fundo transparente para não ser grosseiro
+  container: { 
+    position: "fixed" as const, 
+    bottom: "25px", 
+    left: "50%", 
+    transform: "translateX(-50%)", 
+    width: "92%", 
+    maxWidth: "420px", 
+    zIndex: 1000 
+  },
   inputInner: {
     background: "rgba(10, 10, 10, 0.9)", 
-    backdropFilter: "blur(10px)",
+    backdropFilter: "blur(20px)",
     borderRadius: "100px", 
-    padding: "6px 6px 6px 20px",
+    padding: "0 6px 0 20px",
     display: "flex", 
     alignItems: "center", 
     border: "1px solid rgba(255,255,255,0.1)", 
-    minHeight: "50px", 
+    height: "56px", 
     width: "100%", 
     boxSizing: "border-box" as const
   },
   input: { flex: 1, background: "none", border: "none", color: "#fff", outline: "none", fontSize: "13px" },
-  actionGroup: { display: "flex", alignItems: "center", gap: "8px" },
+  actionGroup: { display: "flex", alignItems: "center", gap: "8px", height: "100%" },
   sendBtn: { background: "none", border: "none", color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer", padding: "0 10px" },
-  micPosition: { position: "relative" as const },
+  micPosition: { display: "flex", alignItems: "center" },
   recorderWrapper: { 
     borderRadius: "50%", 
-    width: "42px", 
-    height: "42px", 
+    width: "44px", 
+    height: "44px", 
     display: "flex", 
     alignItems: "center", 
     justifyContent: "center", 
     cursor: "pointer", 
-    transition: "background 0.2s, box-shadow 0.2s" 
+    transition: "all 0.2s ease" 
   }
 };

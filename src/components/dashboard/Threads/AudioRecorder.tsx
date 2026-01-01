@@ -7,7 +7,6 @@ export default function AudioRecorder({ postId, triggerRecord, onUploadComplete 
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
 
-  // Monitora o estado que vem do componente Pai (ReplyInput)
   useEffect(() => {
     if (triggerRecord) {
       startRecording();
@@ -48,19 +47,20 @@ export default function AudioRecorder({ postId, triggerRecord, onUploadComplete 
   const handleUpload = async (blob: Blob) => {
     if (blob.size < 1000) return;
     setUploading(true);
-    const fileName = `reply_${Date.now()}.webm`;
+    const fileName = `voice_${Date.now()}.webm`;
     
     try {
       const { data: { user } } = await supabase.auth.getUser();
 
-      // Corrigido para o bucket correto que usamos: 'audios' ou 'audio-comments'
-      // Verifique se no seu Supabase o nome é exatamente 'audio-comments'
-      const { error: sErr } = await supabase.storage.from('audios').upload(`replies/${fileName}`, blob);
+      // Ajustado para o nome do bucket que vi na sua imagem: audio-comments
+      const { error: sErr } = await supabase.storage
+        .from('audio-comments')
+        .upload(fileName, blob);
+      
       if (sErr) throw sErr;
       
-      const { data: { publicUrl } } = supabase.storage.from('audios').getPublicUrl(`replies/${fileName}`);
+      const { data: { publicUrl } } = supabase.storage.from('audio-comments').getPublicUrl(fileName);
       
-      // Insere na tabela certa (audio_comments)
       const { error: dbErr } = await supabase.from('audio_comments').insert([{ 
         post_id: postId, 
         user_id: user?.id,
@@ -79,7 +79,7 @@ export default function AudioRecorder({ postId, triggerRecord, onUploadComplete 
   };
 
   return (
-    <div style={{ pointerEvents: 'none' }}> {/* Não interfere no clique do pai */}
+    <div style={{ pointerEvents: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       {uploading ? (
         <span style={{ fontSize: "12px" }}>⌛</span>
       ) : (
