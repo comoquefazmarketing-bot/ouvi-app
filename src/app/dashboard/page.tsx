@@ -1,6 +1,7 @@
 ﻿/**
  * PROJETO OUVI – Dashboard / Feed Principal
- * Versão 2026 Sintonizada - CORREÇÃO DE CABEÇALHO
+ * Versão 2026 - Correção Total de Cabeçalho e Prévias
+ * Foco: Compatibilidade de Perfis e Estabilidade
  */
 
 "use client";
@@ -19,15 +20,16 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
+      // 1. Identifica o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // BUSCA PRECISA: Note o uso do profiles!
+      // 2. BUSCA SINTONIZADA: Puxamos o post e os comentários com seus perfis
       const { data, error } = await supabase
         .from('posts')
         .select(`
           *,
-          profiles:user_id (
+          profiles (
             id, 
             username, 
             avatar_url
@@ -37,7 +39,7 @@ export default function DashboardPage() {
             content,
             username,
             created_at,
-            profiles:user_id (
+            profiles (
               username,
               avatar_url
             )
@@ -48,25 +50,28 @@ export default function DashboardPage() {
       if (error) throw error;
 
       if (data) {
+        // 3. TRATAMENTO DE DADOS ELITE
         const formattedPosts = data.map(post => {
-          // Ajuste fino para garantir que profiles seja um objeto único e não uma lista
-          const profileData = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
+          // Garante que o perfil do autor do post não venha como array
+          const rawProfile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
           
           return {
             ...post,
-            // Forçamos a estrutura que o PostCard espera
-            profiles: profileData || { username: 'membro', avatar_url: '/default-avatar.png' },
+            // Reconstruímos o objeto profile para o PostCard ler com facilidade
+            profiles: rawProfile || { username: 'membro', avatar_url: '/default-avatar.png' },
+            // Ordenamos as prévias de comentários
             audio_comments: post.audio_comments?.sort((a: any, b: any) => 
               new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
             ) || []
           };
         });
+        
         setPosts(formattedPosts);
       }
 
     } catch (err: any) {
-      console.error("Erro na sintonização:", err.message);
-      // Fallback para não ficar sem nada na tela
+      console.error("Erro na sintonização do feed:", err.message);
+      // Fallback de segurança para não sumir com o feed
       const { data: fallback } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
       setPosts(fallback || []);
     } finally {
@@ -79,12 +84,12 @@ export default function DashboardPage() {
   }, [fetchData]);
 
   return (
-    <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px' }}>
+    <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px', position: 'relative' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', padding: '10px' }}>
         
         {loading && (
           <div style={styles.statusContainer}>
-             <p style={styles.loadingText}>SINTONIZANDO...</p>
+             <p style={styles.loadingText}>SINTONIZANDO VOZES...</p>
           </div>
         )}
         
