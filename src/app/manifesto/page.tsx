@@ -1,14 +1,38 @@
 /**
  * PROJETO OUVI – Manifesto (Nível 1-B)
  * Local: src/app/manifesto/page.tsx
+ * Autor: Felipe Makarios
+ * Funcionalidade: Captura de Leads via Supabase
  */
 
 "use client";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function ManifestoPage() {
   const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"ocioso" | "sintonizando" | "sucesso" | "erro">("ocioso");
+
+  const entrarNaFila = async () => {
+    if (!email || !email.includes("@")) return;
+    
+    setStatus("sintonizando");
+
+    try {
+      // Grava o e-mail na tabela waitlist que criamos
+      const { error } = await supabase
+        .from('waitlist')
+        .insert([{ email: email.toLowerCase() }]);
+
+      if (error) throw error;
+      
+      setStatus("sucesso");
+    } catch (err) {
+      console.error("Erro na sintonização:", err);
+      setStatus("erro");
+    }
+  };
 
   return (
     <div style={styles.container}>
@@ -51,20 +75,44 @@ export default function ManifestoPage() {
         </section>
 
         <div style={styles.actionArea}>
-          <input 
-            type="email" 
-            placeholder="Deixe seu sinal (e-mail)..." 
-            style={styles.input}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-          <motion.button 
-            whileHover={{ scale: 1.05, boxShadow: "0 0 15px rgba(0, 242, 254, 0.4)" }}
-            whileTap={{ scale: 0.95 }}
-            style={styles.button}
-          >
-            ENTRAR NA FILA
-          </motion.button>
+          <AnimatePresence mode="wait">
+            {status === "sucesso" ? (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                style={styles.successBox}
+              >
+                <p style={styles.successText}>SINAL CAPTURADO.</p>
+                <p style={styles.subSuccess}>Aguarde o trovão no seu e-mail.</p>
+              </motion.div>
+            ) : (
+              <motion.div 
+                exit={{ opacity: 0, scale: 0.9 }}
+                style={styles.inputWrapper}
+              >
+                <input 
+                  type="email" 
+                  placeholder="Deixe seu sinal (e-mail)..." 
+                  style={styles.input}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={status === "sintonizando"}
+                />
+                <motion.button 
+                  whileHover={{ scale: 1.05, boxShadow: "0 0 15px rgba(0, 242, 254, 0.4)" }}
+                  whileTap={{ scale: 0.95 }}
+                  style={styles.button}
+                  onClick={entrarNaFila}
+                  disabled={status === "sintonizando"}
+                >
+                  {status === "sintonizando" ? "SINTONIZANDO..." : "ENTRAR NA FILA"}
+                </motion.button>
+                {status === "erro" && (
+                  <p style={styles.errorMsg}>Sinal já registrado ou inválido.</p>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </motion.main>
     </div>
@@ -83,7 +131,12 @@ const styles = {
   paragraphs: { display: "flex", flexDirection: "column" as const, gap: "20px" },
   p: { color: "#888", fontSize: "1.1rem", lineHeight: "1.8", fontWeight: "300" as const },
   goldText: { color: "#FFD700", fontSize: "0.9rem", fontWeight: "900" as const, letterSpacing: "2px", marginTop: "20px" },
-  actionArea: { display: "flex", flexDirection: "column" as const, gap: "15px", alignItems: "center" },
+  actionArea: { minHeight: "120px", display: "flex", alignItems: "center", justifyContent: "center" },
+  inputWrapper: { display: "flex", flexDirection: "column" as const, gap: "15px", alignItems: "center", width: "100%" },
   input: { background: "rgba(255,255,255,0.03)", border: "1px solid #111", padding: "18px 25px", borderRadius: "100px", color: "#fff", width: "100%", maxWidth: "320px", outline: "none", textAlign: "center" as const, fontSize: "14px" },
-  button: { background: "transparent", border: "1px solid #00f2fe", color: "#00f2fe", padding: "16px 45px", borderRadius: "100px", fontWeight: "900" as const, fontSize: "11px", cursor: "pointer", letterSpacing: "1px" }
+  button: { background: "transparent", border: "1px solid #00f2fe", color: "#00f2fe", padding: "16px 45px", borderRadius: "100px", fontWeight: "900" as const, fontSize: "11px", cursor: "pointer", letterSpacing: "1px" },
+  successBox: { textAlign: "center" as const },
+  successText: { color: "#00f2fe", fontWeight: "900" as const, letterSpacing: "4px", fontSize: "1.2rem" },
+  subSuccess: { color: "#444", fontSize: "0.9rem", marginTop: "5px" },
+  errorMsg: { color: "#ff4444", fontSize: "10px", marginTop: "10px", letterSpacing: "1px" }
 };
