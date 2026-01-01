@@ -1,6 +1,6 @@
 ﻿/**
  * PROJETO OUVI – Item de Comentário Sensorial (Sintonizado)
- * Ajuste: Ativação de Áudio e Estabilidade
+ * Ajuste: Integração com Modo Escada e Click Sensorial
  */
 
 "use client";
@@ -9,7 +9,7 @@ import { supabase } from "@/lib/supabaseClient";
 import ReactionBar from "@/components/dashboard/Threads/ReactionBar";
 import { motion, AnimatePresence } from "framer-motion";
 
-export default function CommentItem({ comment, allComments, onReply, depth = 0, onDelete }: any) {
+export default function CommentItem({ comment, allComments, onReplyClick, depth = 0, onDelete }: any) {
   const [showMenu, setShowMenu] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -19,15 +19,10 @@ export default function CommentItem({ comment, allComments, onReply, depth = 0, 
 
   const isOwner = userId === comment.user_id;
 
+  // Filtra as respostas para este comentário específico (A Escada)
   const replies = useMemo(() => {
     return allComments?.filter((c: any) => c.parent_id === comment.id) || [];
   }, [allComments, comment.id]);
-
-  const totalReactions = useMemo(() => {
-    return comment.reactions?.loved_by ? comment.reactions.loved_by.length : 0;
-  }, [comment.reactions]);
-
-  const isFrenetic = totalReactions > 5;
 
   const handleDelete = async () => {
     if (!isOwner) return;
@@ -42,10 +37,11 @@ export default function CommentItem({ comment, allComments, onReply, depth = 0, 
   return (
     <div style={{ 
       ...styles.wrapper, 
-      paddingLeft: depth > 0 ? (depth > 3 ? "10px" : "15px") : "0px", 
-      borderLeft: depth > 0 ? "1px solid rgba(0, 242, 254, 0.15)" : "none"
+      paddingLeft: depth > 0 ? "15px" : "0px", 
+      borderLeft: depth > 0 ? "1px solid rgba(0, 242, 254, 0.1)" : "none",
+      marginTop: depth > 0 ? "10px" : "0px"
     }}>
-      <div className={isFrenetic ? "frenetic" : ""} style={styles.container}>
+      <div style={styles.container}>
         <div style={styles.header}>
           <div style={styles.userInfo}>
             <img src={avatarUrl} style={styles.avatar} alt="Avatar" onError={(e) => (e.currentTarget.src = "/default-avatar.png")} />
@@ -69,7 +65,6 @@ export default function CommentItem({ comment, allComments, onReply, depth = 0, 
         <div style={styles.body}>
           {comment.content && <p style={styles.text}>{comment.content}</p>}
           
-          {/* PLAYER DE ÁUDIO ATIVADO */}
           {comment.audio_url && (
             <div style={styles.audioWrapper}>
               <audio src={comment.audio_url} controls style={styles.audio} controlsList="nodownload" />
@@ -78,15 +73,31 @@ export default function CommentItem({ comment, allComments, onReply, depth = 0, 
         </div>
 
         <div style={styles.footer}>
-          <ReactionBar postId={comment.post_id} commentId={comment.id} initialReactions={comment.reactions} onOpenThread={() => onReply && onReply(comment.id)} />
-          <button onClick={() => onReply && onReply(comment.id)} style={styles.replyBtn}>REPLICAR ↴</button>
+          {/* BARRA SENSORIAL DISCRETA */}
+          <ReactionBar 
+            commentId={comment.id} 
+            initialReactions={comment.reactions} 
+            onReply={() => onReplyClick && onReplyClick(comment)} // Aciona a escada
+          />
+          
+          <button onClick={() => onReplyClick && onReplyClick(comment)} style={styles.replyBtn}>
+            RESPONDER
+          </button>
         </div>
       </div>
 
+      {/* RENDERIZAÇÃO RECURSIVA DAS RESPOSTAS */}
       {replies.length > 0 && (
         <div style={styles.repliesList}>
           {replies.map((reply: any) => (
-            <CommentItem key={reply.id} comment={reply} allComments={allComments} onReply={onReply} onDelete={onDelete} depth={depth + 1} />
+            <CommentItem 
+              key={reply.id} 
+              comment={reply} 
+              allComments={allComments} 
+              onReplyClick={onReplyClick} 
+              onDelete={onDelete} 
+              depth={depth + 1} 
+            />
           ))}
         </div>
       )}
@@ -95,23 +106,23 @@ export default function CommentItem({ comment, allComments, onReply, depth = 0, 
 }
 
 const styles = {
-  wrapper: { position: "relative" as const, marginBottom: "14px" },
-  container: { background: "rgba(18, 18, 18, 0.4)", border: "1px solid rgba(255, 255, 255, 0.04)", padding: "14px", borderRadius: "22px", backdropFilter: "blur(15px)", position: "relative" as const, zIndex: 2 },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" },
-  userInfo: { display: "flex", alignItems: "center", gap: "10px" },
-  avatar: { width: "28px", height: "28px", borderRadius: "50%", border: "1px solid rgba(0, 242, 254, 0.15)", objectFit: "cover" as const },
+  wrapper: { position: "relative" as const },
+  container: { background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.04)", padding: "12px", borderRadius: "18px", backdropFilter: "blur(10px)" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" },
+  userInfo: { display: "flex", alignItems: "center", gap: "8px" },
+  avatar: { width: "24px", height: "24px", borderRadius: "50%", border: "1px solid rgba(0, 242, 254, 0.1)", objectFit: "cover" as const },
   nameGroup: { display: "flex", flexDirection: "column" as const },
-  username: { color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, letterSpacing: "0.8px", textTransform: "uppercase" as const },
-  date: { color: "rgba(255, 255, 255, 0.25)", fontSize: "8px" },
-  dotsBtn: { background: "none", border: "none", color: "#fff", cursor: "pointer", opacity: 0.3, padding: "5px", fontSize: "14px" },
-  menuDrawer: { position: "absolute" as const, right: 0, top: "25px", background: "#0a0a0a", padding: "4px", borderRadius: "12px", border: "1px solid #1a1a1a", zIndex: 50, minWidth: "110px" },
-  deleteBtn: { color: "#ff4444", background: "none", border: "none", fontSize: "9px", fontWeight: "900" as const, cursor: "pointer", padding: "10px", width: "100%", textAlign: "left" as const },
-  readOnly: { color: "#333", fontSize: "8px", padding: "10px", display: "block", textAlign: "center" as const },
-  body: { padding: "2px 0 2px 38px" },
-  text: { color: "#eee", fontSize: "14px", lineHeight: "1.5", marginBottom: "6px" },
-  audioWrapper: { margin: "8px 0", background: "rgba(0,0,0,0.6)", borderRadius: "100px", padding: "4px", border: "1px solid rgba(0, 242, 254, 0.1)" },
-  audio: { width: "100%", height: "28px", filter: "invert(1) hue-rotate(180deg) brightness(1.5)" },
-  footer: { marginTop: "12px", display: "flex", flexDirection: "row-reverse" as const, justifyContent: "space-between", alignItems: "center" },
-  replyBtn: { background: "none", border: "none", color: "#444", fontSize: "8px", fontWeight: "900" as const, cursor: "pointer", letterSpacing: "1px", padding: "5px" },
+  username: { color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, letterSpacing: "0.5px" },
+  date: { color: "rgba(255, 255, 255, 0.2)", fontSize: "7px" },
+  dotsBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", padding: "5px" },
+  menuDrawer: { position: "absolute" as const, right: 0, top: "25px", background: "#0a0a0a", padding: "4px", borderRadius: "10px", border: "1px solid #1a1a1a", zIndex: 50 },
+  deleteBtn: { color: "#ff4444", background: "none", border: "none", fontSize: "8px", fontWeight: "900" as const, cursor: "pointer", padding: "8px 12px" },
+  readOnly: { color: "#222", fontSize: "7px", padding: "8px" },
+  body: { paddingLeft: "32px" },
+  text: { color: "#ccc", fontSize: "13px", lineHeight: "1.4", marginBottom: "6px" },
+  audioWrapper: { margin: "5px 0", background: "rgba(0,0,0,0.3)", borderRadius: "100px", padding: "2px", border: "1px solid rgba(255, 255, 255, 0.03)" },
+  audio: { width: "100%", height: "24px", filter: "invert(1) hue-rotate(180deg) opacity(0.6)" },
+  footer: { marginTop: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" },
+  replyBtn: { background: "none", border: "none", color: "rgba(255,255,255,0.2)", fontSize: "8px", fontWeight: "900" as const, cursor: "pointer", letterSpacing: "1px" },
   repliesList: { marginTop: "10px" }
 };
