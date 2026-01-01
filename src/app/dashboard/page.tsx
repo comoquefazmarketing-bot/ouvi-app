@@ -3,6 +3,8 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
+// IMPORTAÇÃO DA PONTE SENSORIAL
+import { notifyArrival } from './telegramService';
 
 export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -17,6 +19,12 @@ export default function DashboardPage() {
       // 1. Pega o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
+
+      // DISPARO DO TELEGRAM: Lógica blindada para identificar quem sintonizou
+      if (user) {
+        const identifier = user.email || user.user_metadata?.username || "Usuário Sintonizado";
+        notifyArrival(identifier);
+      }
 
       // 2. Busca os posts puros
       const { data: postsData, error: postsError } = await supabase
@@ -88,7 +96,7 @@ export default function DashboardPage() {
         <ThreadDrawer 
           post={selectedPost} 
           onClose={() => setSelectedPost(null)} 
-          onRefresh={fetchData} // Apenas para atualizar os dados ao fechar/comentar
+          onRefresh={fetchData} 
         />
       )}
     </div>
