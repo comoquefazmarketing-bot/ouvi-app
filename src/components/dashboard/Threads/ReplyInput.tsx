@@ -12,26 +12,21 @@ export default function ReplyInput({ postId, onRefresh }: any) {
   const handleSendText = async () => {
     if (!text.trim() || loading) return;
     setLoading(true);
-    
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
       const { error } = await supabase.from("audio_comments").insert([{
         post_id: postId,
         content: text,
         user_id: user?.id || null,
         username: user?.user_metadata?.username || user?.email?.split('@')[0] || 'membro'
       }]);
-
       if (error) throw error;
-
       setText("");
-      if (onRefresh) await onRefresh(); 
-      
-    } catch (err: any) { 
+      if (onRefresh) await onRefresh();
+    } catch (err: any) {
       console.error("Falha no envio:", err.message);
-    } finally { 
-      setLoading(false); 
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -48,37 +43,32 @@ export default function ReplyInput({ postId, onRefresh }: any) {
 
         <div style={styles.actionGroup}>
           {text.trim() && !isRecording && (
-            <button 
-              onClick={handleSendText} 
-              style={styles.sendBtn}
-              disabled={loading}
-            >
+            <button onClick={handleSendText} style={styles.sendBtn} disabled={loading}>
               {loading ? "..." : "ENVIAR"}
             </button>
           )}
 
           <div style={styles.micPosition}>
+            {/* O BOTÃO AGORA É UM SÓ E CONTROLA TUDO */}
             <motion.div 
               onPointerDown={() => setIsRecording(true)} 
               onPointerUp={() => setIsRecording(false)}
-              onPointerLeave={() => setIsRecording(false)}
-              animate={!isRecording ? { scale: [1, 1.05, 1] } : { scale: 1.2 }}
-              transition={!isRecording ? { duration: 3, repeat: Infinity } : { duration: 0.1 }}
+              onPointerLeave={() => isRecording && setIsRecording(false)}
+              animate={isRecording ? { scale: 1.3 } : { scale: 1 }}
               style={{
                 ...styles.recorderWrapper,
-                background: isRecording ? "#00f2fe" : "rgba(0, 242, 254, 0.1)",
-                boxShadow: isRecording ? "0 0 25px rgba(0, 242, 254, 0.5)" : "none"
+                background: isRecording ? "#ff4444" : "#00f2fe",
+                boxShadow: isRecording ? "0 0 30px rgba(255, 68, 68, 0.6)" : "0 4px 15px rgba(0,0,0,0.2)"
               }}
             >
-              <div style={{ filter: isRecording ? "brightness(0)" : "brightness(1.5)" }}>
-                <AudioRecorder 
-                  postId={postId} 
-                  onUploadComplete={() => {
-                    setIsRecording(false);
-                    if (onRefresh) onRefresh();
-                  }} 
-                />
-              </div>
+              <AudioRecorder 
+                postId={postId} 
+                triggerRecord={isRecording} // Novo prop para ligar o motor
+                onUploadComplete={() => {
+                  setIsRecording(false);
+                  if (onRefresh) onRefresh();
+                }} 
+              />
             </motion.div>
           </div>
         </div>
@@ -88,14 +78,31 @@ export default function ReplyInput({ postId, onRefresh }: any) {
 }
 
 const styles = {
-  container: { padding: "10px 15px 30px", width: "100%", boxSizing: "border-box" as const, background: "#050505" },
+  container: { padding: "10px 15px 25px", width: "100%", background: "transparent" }, // Fundo transparente para não ser grosseiro
   inputInner: {
-    background: "#000", borderRadius: "100px", padding: "4px 4px 4px 18px",
-    display: "flex", alignItems: "center", border: "1px solid #1a1a1a", minHeight: "54px", width: "100%", boxSizing: "border-box" as const
+    background: "rgba(10, 10, 10, 0.9)", 
+    backdropFilter: "blur(10px)",
+    borderRadius: "100px", 
+    padding: "6px 6px 6px 20px",
+    display: "flex", 
+    alignItems: "center", 
+    border: "1px solid rgba(255,255,255,0.1)", 
+    minHeight: "50px", 
+    width: "100%", 
+    boxSizing: "border-box" as const
   },
-  input: { flex: 1, background: "none", border: "none", color: "#fff", outline: "none", fontSize: "12px", minWidth: "0" },
-  actionGroup: { display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 },
+  input: { flex: 1, background: "none", border: "none", color: "#fff", outline: "none", fontSize: "13px" },
+  actionGroup: { display: "flex", alignItems: "center", gap: "8px" },
   sendBtn: { background: "none", border: "none", color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer", padding: "0 10px" },
   micPosition: { position: "relative" as const },
-  recorderWrapper: { borderRadius: "50%", width: "46px", height: "46px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background 0.2s" }
+  recorderWrapper: { 
+    borderRadius: "50%", 
+    width: "42px", 
+    height: "42px", 
+    display: "flex", 
+    alignItems: "center", 
+    justifyContent: "center", 
+    cursor: "pointer", 
+    transition: "background 0.2s, box-shadow 0.2s" 
+  }
 };
