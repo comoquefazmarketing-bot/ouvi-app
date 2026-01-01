@@ -1,6 +1,7 @@
 ﻿/**
- * PROJETO OUVI – PostCard ELITE (Sintonizado 2026)
- * Ajuste: Barra de Reação Sensorial Discreta e Blindagem de Layout
+ * PROJETO OUVI – PostCard SENSORIAL (2026)
+ * Layout: Ícones à esquerda, frase à direita.
+ * Experiência: Feedback tátil visual e profundidade.
  */
 
 "use client";
@@ -19,139 +20,106 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
 
   const isOwner = currentUserId === post.user_id;
 
-  const handleDeletePost = async () => {
-    if (!isOwner) return;
-    const { error } = await supabase.from("posts").delete().eq("id", post.id);
-    if (!error) {
-      if (onDelete) onDelete(post.id);
-      setShowMenu(false);
-    }
-  };
-
   const previewComments = (post.audio_comments || []).slice(0, 4);
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, scale: 0.98 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true }}
+      whileHover={{ borderColor: "rgba(0, 242, 254, 0.12)" }}
       style={styles.card}
     >
       <div style={styles.header}>
         <div style={styles.userInfo}>
-          <img 
+          <motion.img 
+            whileHover={{ scale: 1.1 }}
             src={post.profiles?.avatar_url || "/default-avatar.png"} 
             style={styles.avatar} 
             alt="User"
-            onError={(e) => (e.currentTarget.src = "/default-avatar.png")}
           />
           <div style={styles.nameGroup}>
-            <span style={styles.username}>
-              {post.profiles?.username ? `@${post.profiles.username}` : "@membro"}
-            </span>
-            <span style={styles.date}>
-              {post.created_at ? new Date(post.created_at).toLocaleDateString('pt-BR') : 'Recente'}
-            </span>
+            <span style={styles.username}>@{post.profiles?.username || "membro"}</span>
+            <span style={styles.date}>{post.created_at ? new Date(post.created_at).toLocaleDateString('pt-BR') : '30/12/2025'}</span>
           </div>
         </div>
-
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setShowMenu(!showMenu)} style={styles.dotsBtn}>•••</button>
-          <AnimatePresence>
-            {showMenu && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.9 }} 
-                animate={{ opacity: 1, scale: 1 }} 
-                exit={{ opacity: 0, scale: 0.9 }}
-                style={styles.menuDrawer}
-              >
-                {isOwner ? (
-                  <button onClick={handleDeletePost} style={styles.deleteBtn}>🗑️ EXCLUIR POST</button>
-                ) : (
-                  <span style={styles.readOnly}>SINTONIZADO</span>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+        <button onClick={() => setShowMenu(!showMenu)} style={styles.dotsBtn}>•••</button>
       </div>
 
-      {post.image_url && (
-        <div style={styles.imageContainer}>
-          <img src={post.image_url} style={styles.postImage} alt="Post" />
+      <motion.div 
+        style={styles.content} 
+        onClick={() => onOpenThread(post)}
+        whileTap={{ scale: 0.995 }}
+      >
+        {post.image_url && (
+          <div style={styles.imageContainer}>
+            <img src={post.image_url} style={styles.postImage} alt="Post" />
+          </div>
+        )}
+        <div style={styles.bodyTextContainer}>
+          {post.content && <p style={styles.text}>{post.content}</p>}
+        </div>
+      </motion.div>
+
+      {/* PRÉVIA SENSORIAL (ESCADA) */}
+      {previewComments.length > 0 && (
+        <div style={styles.multiPreviewContainer} onClick={() => onOpenThread(post)}>
+          {previewComments.map((comm: any, i: number) => (
+            <motion.div 
+              key={comm.id}
+              initial={{ opacity: 0, x: -5 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: i * 0.1 }}
+              style={styles.previewBox}
+            >
+              <span style={styles.previewUser}>@{comm.profiles?.username || "membro"}</span>
+              <p style={styles.previewText}>{comm.content || "Voz sintonizada..."}</p>
+            </motion.div>
+          ))}
         </div>
       )}
 
-      <div style={styles.body}>
-        {post.content && <p style={styles.text}>{post.content}</p>}
-        
-        {post.audio_url && (
-          <audio src={post.audio_url} controls style={styles.audio} />
-        )}
-        
-        {previewComments.length > 0 && (
-          <div style={styles.multiPreviewContainer} onClick={() => onOpenThread(post)}>
-            {previewComments.map((comm: any, idx: number) => (
-              <motion.div 
-                key={comm.id}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: idx * 0.1 }}
-                style={styles.previewBox} 
-              >
-                <div style={styles.previewHeader}>
-                  <span style={styles.previewUser}>@{comm.profiles?.username || comm.username || "membro"}</span>
-                </div>
-                <p style={styles.previewText}>
-                  {comm.audio_url ? "🔊 Voz enviada..." : (comm.content || "Voz sintonizada...")}
-                </p>
-              </motion.div>
-            ))}
-            <div style={styles.viewMore}>CLIQUE PARA OUVIR TUDO ↴</div>
-          </div>
-        )}
-
-        {/* BARRA DE REAÇÃO – Agora integrada de forma discreta no final do card */}
-        <div style={styles.reactionContainer}>
+      {/* FOOTER: A BARRA QUE VOCÊ APROVOU */}
+      <div style={styles.footer}>
+        <div style={styles.reactionSide}>
           <ReactionBar 
             postId={post.id} 
             initialReactions={post.reactions}
             onOpenThread={() => onOpenThread(post)}
           />
         </div>
+        
+        <motion.button 
+          whileHover={{ color: "#eee", x: 3 }}
+          onClick={() => onOpenThread(post)} 
+          style={styles.viewMoreBtn}
+        >
+          O QUE ESTÃO FALANDO... ¬
+        </motion.button>
       </div>
     </motion.div>
   );
 }
 
 const styles = {
-  card: { background: "rgba(10, 10, 10, 0.5)", backdropFilter: "blur(25px)", borderRadius: "28px", border: "1px solid rgba(255, 255, 255, 0.06)", marginBottom: "20px", overflow: "hidden" },
-  header: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", padding: "16px 20px" },
-  userInfo: { display: "flex", alignItems: "center", gap: "12px" },
-  avatar: { width: "40px", height: "40px", borderRadius: "50%", objectFit: "cover" as const, border: "1px solid rgba(0, 242, 254, 0.2)" },
+  card: { background: "#050505", borderRadius: "28px", border: "1px solid #111", marginBottom: "25px", overflow: "hidden", transition: "border 0.3s ease" },
+  header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" },
+  userInfo: { display: "flex", alignItems: "center", gap: "10px" },
+  avatar: { width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover" as const, border: "1px solid #222" },
   nameGroup: { display: "flex", flexDirection: "column" as const },
-  username: { color: "#fff", fontWeight: "900" as const, fontSize: "14px", letterSpacing: "0.5px" },
-  date: { color: "rgba(255, 255, 255, 0.4)", fontSize: "10px", marginTop: "2px" },
-  dotsBtn: { background: "none", border: "none", color: "#fff", cursor: "pointer", fontSize: "18px", opacity: 0.6, padding: "0 5px" },
-  menuDrawer: { position: "absolute" as const, right: 0, top: "30px", background: "rgba(15, 15, 15, 0.98)", borderRadius: "14px", padding: "6px", border: "1px solid rgba(255,255,255,0.1)", zIndex: 50, minWidth: "130px" },
-  deleteBtn: { background: "none", border: "none", color: "#ff4444", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer", width: "100%", textAlign: "left" as const, padding: "10px" },
-  readOnly: { color: "rgba(255,255,255,0.2)", fontSize: "9px", padding: "10px", display: "block" },
-  imageContainer: { width: "100%", overflow: "hidden" },
-  postImage: { width: "100%", height: "auto", display: "block", maxHeight: "400px", objectFit: "cover" as const },
-  body: { padding: "16px 20px 20px 20px" },
-  text: { color: "#ddd", fontSize: "15px", lineHeight: "1.5", marginBottom: "12px" },
-  audio: { width: "100%", height: "36px", filter: "invert(1) brightness(1.5) hue-rotate(180deg)", marginBottom: "16px", borderRadius: "8px" },
-  multiPreviewContainer: { cursor: "pointer", marginBottom: "16px" },
-  previewBox: { background: "rgba(0, 242, 254, 0.03)", padding: "8px 12px", borderRadius: "12px", borderLeft: "2px solid rgba(0, 242, 254, 0.3)", marginBottom: "6px" },
-  previewHeader: { display: "flex", marginBottom: "2px" },
-  previewUser: { color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, textTransform: "uppercase" as const },
-  previewText: { color: "#888", fontSize: "11px", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" },
-  viewMore: { color: "#333", fontSize: "8px", fontWeight: "900" as const, textAlign: "center" as const, marginTop: "4px", letterSpacing: "1px" },
-  // ESTILO ADICIONADO PARA BLINDAR A BARRA
-  reactionContainer: { 
-    display: "flex", 
-    justifyContent: "flex-end", 
-    marginTop: "10px", 
-    paddingTop: "10px", 
-    borderTop: "1px solid rgba(255,255,255,0.03)" 
-  }
+  username: { color: "#fff", fontWeight: "900" as const, fontSize: "13px" },
+  date: { color: "#444", fontSize: "9px" },
+  dotsBtn: { background: "none", border: "none", color: "#444", cursor: "pointer", fontSize: "16px" },
+  content: { cursor: "pointer" },
+  imageContainer: { width: "100%", background: "#000" },
+  postImage: { width: "100%", height: "auto", display: "block", opacity: 0.9 },
+  bodyTextContainer: { padding: "15px 20px 5px" },
+  text: { color: "#fff", fontSize: "15px", lineHeight: "1.4" },
+  multiPreviewContainer: { padding: "0 20px", cursor: "pointer", marginBottom: "15px" },
+  previewBox: { background: "rgba(255, 255, 255, 0.02)", padding: "8px 12px", borderRadius: "12px", marginBottom: "6px", border: "1px solid rgba(255,255,255,0.03)" },
+  previewUser: { color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, textTransform: "uppercase" as const },
+  previewText: { color: "#666", fontSize: "10px" },
+  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", borderTop: "1px solid #111" },
+  reactionSide: { display: "flex", alignItems: "center" },
+  viewMoreBtn: { background: "none", border: "none", color: "#333", fontSize: "8px", fontWeight: "900" as const, cursor: "pointer", letterSpacing: "1px", transition: "color 0.2s" }
 };
