@@ -6,7 +6,7 @@ import { Home, User, Mic, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
 // Ajustado para o caminho exato validado pelo PowerShell
-import { notifyArrival } from './telegramService';
+import { notifyArrival } from '@/app/dashboard/telegramService';
 
 // Importações dos componentes
 import PostCard from '@/components/dashboard/Post/PostCard';
