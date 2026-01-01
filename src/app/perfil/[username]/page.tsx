@@ -4,7 +4,11 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, User, Mic, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { notifyArrival } from '@/app/dashboard/telegramService';
+
+// Ajustado para o caminho exato validado pelo PowerShell
+import { notifyArrival } from './telegramService';
+
+// Importações dos componentes
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
 import InstallStories from '@/components/dashboard/InstallStories';
@@ -42,12 +46,10 @@ export default function DashboardPage() {
 
       if (error) throw error;
 
-      // Atualiza o status no banco de dados
+      // Atualiza o status no banco de dados para evitar reuso
       await supabase.from('invites').update({ status: 'enviado' }).eq('code', codigoParaUsar);
       
       alert("Sinal enviado com sucesso.");
-      
-      // Atualiza o estado local imediatamente
       setMyInvites(prev => prev.filter(inv => inv.code !== codigoParaUsar));
       
     } catch (err) {
@@ -64,7 +66,7 @@ export default function DashboardPage() {
       if (!user) return;
       setCurrentUser(user);
 
-      // 1. Perfil e Notificações
+      // 1. Perfil e Notificações (Telegram Core)
       const { data: profileData } = await supabase
         .from('profiles')
         .select('username, welcome_sent')
@@ -77,6 +79,7 @@ export default function DashboardPage() {
           await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
         
+        // Regra do PWA: Se não for nativo e nunca viu o tutorial, mostra o InstallStories
         const isPWA = window.matchMedia('(display-mode: standalone)').matches;
         const hasSeen = localStorage.getItem('ouvi_tutorial_seen');
         if (!isPWA && !hasSeen) {
@@ -84,7 +87,7 @@ export default function DashboardPage() {
         }
       }
 
-      // 2. Busca de Convites Ativos
+      // 2. Busca de Convites (Aparecerão as 10 chaves da Livia aqui)
       const { data: invites } = await supabase
         .from('invites')
         .select('code')
@@ -92,7 +95,7 @@ export default function DashboardPage() {
         .eq('status', 'disponivel');
       if (invites) setMyInvites(invites);
 
-      // 3. Feed de Áudio Completo
+      // 3. Feed de Áudio
       const { data: postsData } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
       const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url');
       const { data: comments } = await supabase.from('audio_comments').select('*');
@@ -131,7 +134,7 @@ export default function DashboardPage() {
 
       <div className="fixed inset-0 bg-black overflow-hidden flex flex-col font-sans select-none">
         
-        {/* Header Fixo */}
+        {/* Header Fixo Minimalista */}
         <div className="flex justify-center gap-8 py-4 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-50">
           <button onClick={() => setTab(0)} className={`text-[10px] font-black tracking-[3px] transition-all ${tab === 0 ? 'text-white' : 'text-zinc-600'}`}>
             PARA VOCÊ
@@ -141,34 +144,24 @@ export default function DashboardPage() {
           </button>
         </div>
 
-        {/* Motor de Swipe */}
+        {/* Motor de Swipe Sensorial */}
         <motion.div 
           className="flex h-full w-[200vw]"
           animate={{ x: tab === 0 ? '0%' : '-50%' }}
           transition={{ type: 'spring', stiffness: 300, damping: 35 }}
         >
-          {/* LADO A: FEED GERAL */}
+          {/* LADO A: FEED */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 px-4 scrollbar-hide">
             
-            {/* Botão de Convites Dinâmico */}
             {myInvites.length > 0 && (
               <div className="mt-8 mb-4 flex justify-center">
                 <motion.button 
                   onClick={handleEnviarConvite}
                   animate={{ 
                     scale: [1, 1.05, 1],
-                    boxShadow: [
-                      "0 0 0px rgba(255,255,255,0)", 
-                      "0 0 15px rgba(255,255,255,0.15)", 
-                      "0 0 0px rgba(255,255,255,0)"
-                    ]
+                    boxShadow: ["0 0 0px rgba(255,255,255,0)", "0 0 15px rgba(255,255,255,0.15)", "0 0 0px rgba(255,255,255,0)"]
                   }}
-                  transition={{ 
-                    duration: 3, 
-                    repeat: Infinity, 
-                    repeatDelay: 8,
-                    ease: "easeInOut" 
-                  }}
+                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 8, ease: "easeInOut" }}
                   className="bg-white text-black px-10 py-3 rounded-full text-[11px] font-black tracking-[2px] shadow-2xl active:scale-95 transition-all"
                 >
                   {myInvites.length} {myInvites.length === 1 ? 'CONVITE DISPONÍVEL' : 'CONVITES DISPONÍVEIS'}
@@ -193,7 +186,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* LADO B: GRADE PERFIL */}
+          {/* LADO B: PERFIL */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 bg-zinc-950 px-1">
             <div className="grid grid-cols-3 gap-0.5 mt-0.5">
               {posts.filter(p => p.user_id === currentUser?.id).map(post => (
@@ -205,7 +198,7 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Barra de Navegação App-Like */}
+        {/* Navigation Bar (Microfone Untouchable) */}
         <nav className="fixed bottom-0 w-full bg-black/95 border-t border-zinc-900 pb-10 pt-4 px-10 flex justify-between items-center z-[100] backdrop-blur-2xl">
           <button onClick={() => setTab(0)} className={tab === 0 ? 'text-white' : 'text-zinc-800'}>
             <Home size={24} fill={tab === 0 ? "white" : "none"} />
