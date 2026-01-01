@@ -1,6 +1,6 @@
 ﻿/**
  * PROJETO OUVI – PostCard ELITE (Sintonizado 2026)
- * Ajuste: Prévia de múltiplas vozes (até 4) e Blindagem
+ * Ajuste: Prévia de áudio nas vozes e Blindagem Total
  */
 
 "use client";
@@ -28,7 +28,6 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
     }
   };
 
-  // --- PRÉVIA MULTI-VOZ (Até 4 comentários) ---
   const previewComments = (post.audio_comments || []).slice(0, 4);
 
   return (
@@ -37,7 +36,6 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
       animate={{ opacity: 1, y: 0 }}
       style={styles.card}
     >
-      {/* CABEÇALHO */}
       <div style={styles.header}>
         <div style={styles.userInfo}>
           <img 
@@ -77,7 +75,6 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
         </div>
       </div>
 
-      {/* IMAGEM DO POST */}
       {post.image_url && (
         <div style={styles.imageContainer}>
           <img src={post.image_url} style={styles.postImage} alt="Post" />
@@ -85,14 +82,12 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
       )}
 
       <div style={styles.body}>
-        {/* CONTEÚDO PRINCIPAL */}
         {post.content && <p style={styles.text}>{post.content}</p>}
         
         {post.audio_url && (
           <audio src={post.audio_url} controls style={styles.audio} />
         )}
         
-        {/* PRÉVIA SENSORIAL DE VOZES (MAP de até 4) */}
         {previewComments.length > 0 && (
           <div style={styles.multiPreviewContainer} onClick={() => onOpenThread(post)}>
             {previewComments.map((comm: any, idx: number) => (
@@ -107,7 +102,8 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
                   <span style={styles.previewUser}>@{comm.profiles?.username || comm.username || "membro"}</span>
                 </div>
                 <p style={styles.previewText}>
-                  {comm.content || "Voz sintonizada..."}
+                  {/* Se houver audio_url no comentário, mostra o ícone de voz na prévia */}
+                  {comm.audio_url ? "🔊 Voz enviada..." : (comm.content || "Voz sintonizada...")}
                 </p>
               </motion.div>
             ))}
@@ -115,7 +111,6 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
           </div>
         )}
 
-        {/* BARRA DE AÇÕES */}
         <ReactionBar 
           postId={post.id} 
           initialReactions={post.reactions}
@@ -144,13 +139,7 @@ const styles = {
   text: { color: "#ddd", fontSize: "15px", lineHeight: "1.5", marginBottom: "12px" },
   audio: { width: "100%", height: "36px", filter: "invert(1) brightness(1.5) hue-rotate(180deg)", marginBottom: "16px", borderRadius: "8px" },
   multiPreviewContainer: { cursor: "pointer", marginBottom: "16px" },
-  previewBox: {
-    background: "rgba(0, 242, 254, 0.03)",
-    padding: "8px 12px",
-    borderRadius: "12px",
-    borderLeft: "2px solid rgba(0, 242, 254, 0.3)",
-    marginBottom: "6px"
-  },
+  previewBox: { background: "rgba(0, 242, 254, 0.03)", padding: "8px 12px", borderRadius: "12px", borderLeft: "2px solid rgba(0, 242, 254, 0.3)", marginBottom: "6px" },
   previewHeader: { display: "flex", marginBottom: "2px" },
   previewUser: { color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, textTransform: "uppercase" as const },
   previewText: { color: "#888", fontSize: "11px", whiteSpace: "nowrap" as const, overflow: "hidden", textOverflow: "ellipsis" },
