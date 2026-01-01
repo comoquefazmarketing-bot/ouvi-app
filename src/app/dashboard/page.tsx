@@ -1,6 +1,7 @@
 ﻿/**
- * PROJETO OUVI – Plataforma Social de Voz
- * Dashboard / Feed Principal
+ * PROJETO OUVI – Dashboard / Feed Principal
+ * Versão 2026 Sintonizada
+ * Ajuste: Query Relacional para Prévias e Comentários
  */
 
 "use client";
@@ -13,48 +14,57 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<any>(null); // Estado para o usuário logado
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const fetchData = async () => {
     try {
       setLoading(true);
       
-      // 1. Identifica o usuário logado para liberar os (...)
+      // 1. Identifica o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 2. Busca simples dos posts
-      const { data: postsData, error: postsError } = await supabase
+      // 2. BUSCA ELITE: Post + Perfil + Comentários (Tudo em uma tacada só)
+      // O audio_comments(profiles(...)) garante que a prévia tenha nome e foto
+      const { data, error } = await supabase
         .from('posts')
-        .select('*')
+        .select(`
+          *,
+          profiles (
+            id, 
+            full_name, 
+            username, 
+            avatar_url
+          ),
+          audio_comments (
+            id,
+            content,
+            username,
+            created_at,
+            audio_url,
+            profiles (
+              username,
+              avatar_url
+            )
+          )
+        `)
         .order('created_at', { ascending: false });
 
-      if (postsError) throw postsError;
+      if (error) throw error;
 
-      if (postsData && postsData.length > 0) {
-        const userIds = postsData.map(p => p.user_id).filter(id => id !== null);
+      // 3. Organiza os dados (O audio_comments vem como array, pegamos os mais recentes primeiro)
+      const formattedPosts = (data || []).map(post => ({
+        ...post,
+        // Garantimos que o PostCard encontre a lista de comentários para a prévia
+        audio_comments: post.audio_comments?.sort((a: any, b: any) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        ) || []
+      }));
 
-        // 3. Busca os perfis
-        const { data: profilesData } = await supabase
-          .from('profiles')
-          .select('id, full_name, username, avatar_url')
-          .in('id', userIds);
+      setPosts(formattedPosts);
 
-        // 4. Montagem manual injetando perfil e data
-        const merged = postsData.map(post => {
-          const userProfile = profilesData?.find(p => p.id === post.user_id) || null;
-          return {
-            ...post,
-            profile: userProfile,
-            profiles: userProfile, 
-            created_at: post.created_at
-          };
-        });
-
-        setPosts(merged);
-      }
     } catch (err: any) {
-      console.error("Erro ao carregar o feed:", err.message);
+      console.error("Erro ao sintonizar o feed:", err.message);
     } finally {
       setLoading(false);
     }
@@ -68,21 +78,22 @@ export default function DashboardPage() {
     <div style={{ 
       backgroundColor: '#000', 
       minHeight: '100vh', 
-      paddingBottom: '180px', 
+      paddingBottom: '120px', // Ajustado para não vazar
       position: 'relative',
       overflowX: 'hidden'
     }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', padding: '10px' }}>
+        
         {loading && (
-          <p style={{ color: '#fff', textAlign: 'center', marginTop: '40px', fontWeight: '900', fontSize: '12px' }}>
-            CONECTANDO ÀS VOZES...
-          </p>
+          <div style={styles.statusContainer}>
+             <p style={styles.loadingText}>SINTONIZANDO VOZES...</p>
+          </div>
         )}
         
         {!loading && posts.length === 0 && (
-          <p style={{ color: '#444', textAlign: 'center', marginTop: '40px', fontWeight: '900' }}>
-            NENHUMA VOZ ENCONTRADA.
-          </p>
+          <div style={styles.statusContainer}>
+             <p style={styles.emptyText}>O SILÊNCIO É PROFUNDO.</p>
+          </div>
         )}
 
         {posts.map((post) => (
@@ -90,7 +101,6 @@ export default function DashboardPage() {
             key={post.id} 
             post={post} 
             onOpenThread={setSelectedPost}
-            // AGORA O POSTCARD SABE QUEM É VOCÊ:
             currentUserId={currentUser?.id} 
           />
         ))}
@@ -105,3 +115,9 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+const styles = {
+  statusContainer: { marginTop: '80px', textAlign: 'center' as const },
+  loadingText: { color: '#00f2fe', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '3px' },
+  emptyText: { color: '#333', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' }
+};
