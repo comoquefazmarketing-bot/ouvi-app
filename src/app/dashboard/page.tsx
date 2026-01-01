@@ -98,4 +98,4 @@ export default function DashboardPage() {
 const styles = {
   loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' },
   emptyText: { color: '#333', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' }
-};
+};cade o git
