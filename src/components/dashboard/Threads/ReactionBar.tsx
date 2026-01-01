@@ -1,72 +1,64 @@
 ﻿"use client";
 import React, { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { supabase } from "@/lib/supabaseClient";
 
-export default function ReactionBar({ commentId, initialReactions, onReply }: any) {
-  const [liked, setLiked] = useState(false);
+export default function ReactionBar({ postId, initialReactions, onReply, onRefresh }: any) {
   const [isElectrified, setIsElectrified] = useState(false);
+  const [isPortalOpen, setIsPortalOpen] = useState(false);
 
-  // Gatilho de Energia (Raio)
-  const triggerEnergy = (e: any) => {
-    e.stopPropagation();
-    setIsElectrified(true);
-    setTimeout(() => setIsElectrified(false), 800);
+  const handleSignal = async (type: 'zap' | 'heart' | 'mic') => {
+    if (type === 'zap') {
+      setIsElectrified(true);
+      setTimeout(() => setIsElectrified(false), 800);
+    }
+    
+    if (type === 'mic') {
+      setIsPortalOpen(true);
+      setTimeout(() => { setIsPortalOpen(false); onReply(); }, 600);
+    }
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('post_reactions').insert([{ post_id: postId, user_id: user.id, type }]);
+    if (onRefresh) onRefresh();
   };
+
+  const getCount = (type: string) => (initialReactions || []).filter((r: any) => r.type === type).length;
 
   return (
     <div style={styles.wrapper}>
-      {/* Feedback de Choque Sutil */}
-      {isElectrified && (
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: [0, 0.5, 0], scale: [1, 1.05, 1] }}
-          style={styles.shockPulse}
-        />
-      )}
+      <AnimatePresence>
+        {isElectrified && (
+          <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: [0, 1, 0], scale: [1, 2] }} style={styles.shockPulse} />
+        )}
+        {isPortalOpen && (
+          <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 15, opacity: [0, 1, 0] }} transition={{ duration: 0.6 }} style={styles.portalFlash} />
+        )}
+      </AnimatePresence>
 
       <div style={styles.pill}>
-        {/* ENERGIA - ⚡ */}
-        <motion.button 
-          onClick={triggerEnergy}
-          whileTap={{ scale: 0.8 }}
-          style={styles.iconBtn}
-        >
-          <span style={{...styles.emoji, color: "#ffdf00", filter: isElectrified ? "drop-shadow(0 0 10px #ffdf00)" : "none"}}>
-            ⚡
-          </span>
-          <span style={styles.count}>{initialReactions?.energy || 0}</span>
+        {/* ENERGIA */}
+        <motion.button onClick={(e) => { e.stopPropagation(); handleSignal('zap'); }} whileTap={{ scale: 0.6 }} style={styles.iconBtn}>
+          <span style={{...styles.emoji, color: "#ffdf00", filter: isElectrified ? "drop-shadow(0 0 15px #ffdf00)" : "none"}}>⚡</span>
+          <span style={styles.count}>{getCount('zap')}</span>
         </motion.button>
 
         <div style={styles.divider} />
 
-        {/* RESPONDER (MICROFONE) - 🎙️ */}
-        {/* Este botão agora é o portal para a Thread da Thread */}
-        <motion.button 
-          onClick={(e) => { e.stopPropagation(); onReply(); }}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-          style={styles.iconBtn}
-        >
-          <span style={{...styles.emoji, color: "#00f2fe"}}>🎙️</span>
+        {/* PORTAL MICROFONE */}
+        <motion.button onClick={(e) => { e.stopPropagation(); handleSignal('mic'); }} whileHover={{ scale: 1.3, rotate: -10 }} style={styles.iconBtn}>
+          <span style={{...styles.emoji, color: "#00f2fe", textShadow: "0 0 10px #00f2fe"}}>🎙️</span>
+          <span style={styles.count}>{getCount('mic')}</span>
         </motion.button>
 
         <div style={styles.divider} />
 
-        {/* CURTIR - ❤️ */}
-        <motion.button 
-          onClick={(e) => { e.stopPropagation(); setLiked(!liked); }}
-          whileTap={{ scale: 1.4 }}
-          style={styles.iconBtn}
-        >
-          <motion.span 
-            animate={{ 
-              scale: liked ? [1, 1.2, 1] : 1,
-              filter: liked ? "grayscale(0) drop-shadow(0 0 5px #ff0000)" : "grayscale(1) opacity(0.5)"
-            }}
-            style={styles.emoji}
-          >
-            ❤️
-          </motion.span>
+        {/* CORAÇÃO */}
+        <motion.button onClick={(e) => { e.stopPropagation(); handleSignal('heart'); }} whileTap={{ scale: 1.5 }} style={styles.iconBtn}>
+          <span style={styles.emoji}>❤️</span>
+          <span style={styles.count}>{getCount('heart')}</span>
         </motion.button>
       </div>
     </div>
@@ -74,40 +66,12 @@ export default function ReactionBar({ commentId, initialReactions, onReply }: an
 }
 
 const styles = {
-  wrapper: { 
-    display: "flex", 
-    justifyContent: "flex-end", 
-    width: "100%", 
-    marginTop: "8px",
-    position: "relative" as const 
-  },
-  shockPulse: {
-    position: "absolute" as const,
-    top: 0, left: 0, right: 0, bottom: 0,
-    borderRadius: "100px",
-    border: "1px solid #ffdf00",
-    pointerEvents: "none" as const,
-    zIndex: 1
-  },
-  pill: { 
-    display: "flex", 
-    alignItems: "center", 
-    padding: "4px 12px", 
-    background: "rgba(15, 15, 15, 0.6)", 
-    backdropFilter: "blur(10px)", 
-    borderRadius: "100px", 
-    border: "1px solid rgba(255,255,255,0.05)", 
-    gap: "12px" 
-  },
-  iconBtn: { 
-    background: "none", 
-    border: "none", 
-    cursor: "pointer", 
-    display: "flex", 
-    alignItems: "center",
-    padding: "4px"
-  },
-  emoji: { fontSize: "14px", transition: "all 0.3s ease" },
-  count: { fontSize: "9px", color: "rgba(255,255,255,0.5)", fontWeight: "bold" as const, marginLeft: "4px" },
-  divider: { width: "1px", height: "12px", background: "rgba(255,255,255,0.08)" }
+  wrapper: { position: "relative" as const, display: "flex", alignItems: "center" },
+  shockPulse: { position: "absolute" as const, inset: -10, borderRadius: "100px", border: "2px solid #ffdf00", pointerEvents: "none" as const },
+  portalFlash: { position: "absolute" as const, width: "10px", height: "10px", background: "radial-gradient(circle, #00f2fe 0%, transparent 70%)", borderRadius: "50%", zIndex: 99, pointerEvents: "none" as const },
+  pill: { display: "flex", alignItems: "center", padding: "6px 16px", background: "rgba(10, 10, 10, 0.8)", backdropFilter: "blur(15px)", borderRadius: "100px", border: "1px solid rgba(255,255,255,0.08)", gap: "12px" },
+  iconBtn: { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" },
+  emoji: { fontSize: "15px", transition: "all 0.3s ease" },
+  count: { fontSize: "10px", color: "rgba(255,255,255,0.5)", fontWeight: "900" as const },
+  divider: { width: "1px", height: "14px", background: "rgba(255,255,255,0.1)" }
 };
