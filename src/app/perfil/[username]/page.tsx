@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Home, User, Mic, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
-import { notifyArrival } from './telegramService';
+import { notifyArrival } from '@/app/dashboard/telegramService';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
 import InstallStories from '@/components/dashboard/InstallStories';
@@ -22,7 +22,6 @@ export default function DashboardPage() {
   const handleEnviarConvite = async () => {
     if (myInvites.length === 0) return;
 
-    // Pegamos sempre o primeiro código disponível do "cofre"
     const codigoParaUsar = myInvites[0].code;
     const emailAmigo = window.prompt(`Você tem ${myInvites.length} chaves. Enviar sinal para qual e-mail?`);
     
@@ -32,7 +31,7 @@ export default function DashboardPage() {
     }
 
     try {
-      // Dispara a Edge Function de e-mail (Resend) configurada anteriormente
+      // Dispara a Edge Function de e-mail (Resend)
       const { error } = await supabase.functions.invoke('resend', {
         body: { 
           to: emailAmigo,
@@ -48,7 +47,7 @@ export default function DashboardPage() {
       
       alert("Sinal enviado com sucesso.");
       
-      // Atualiza o estado local para o botão mudar o número imediatamente
+      // Atualiza o estado local imediatamente
       setMyInvites(prev => prev.filter(inv => inv.code !== codigoParaUsar));
       
     } catch (err) {
@@ -61,38 +60,39 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) return;
       setCurrentUser(user);
 
-      if (user) {
-        const { data: profileData } = await supabase
-          .from('profiles')
-          .select('username, welcome_sent')
-          .eq('id', user.id)
-          .single();
+      // 1. Perfil e Notificações
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('username, welcome_sent')
+        .eq('id', user.id)
+        .single();
 
-        if (profileData) {
-          // Notificação do Telegram para novos membros
-          if (!profileData.welcome_sent) {
-            await notifyArrival(profileData.username || "Novo Membro");
-            await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
-          }
-          
-          const isPWA = window.matchMedia('(display-mode: standalone)').matches;
-          const hasSeen = localStorage.getItem('ouvi_tutorial_seen');
-          if (!isPWA && !hasSeen) {
-            setShowTutorial(true);
-          }
+      if (profileData) {
+        if (!profileData.welcome_sent) {
+          await notifyArrival(profileData.username || "Novo Membro");
+          await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
-
-        // Busca convites disponíveis (ex: os 10 da Livia aparecerão aqui)
-        const { data: invites } = await supabase
-          .from('invites')
-          .select('code')
-          .eq('owner_id', user.id)
-          .eq('status', 'disponivel');
-        if (invites) setMyInvites(invites);
+        
+        const isPWA = window.matchMedia('(display-mode: standalone)').matches;
+        const hasSeen = localStorage.getItem('ouvi_tutorial_seen');
+        if (!isPWA && !hasSeen) {
+          setShowTutorial(true);
+        }
       }
 
+      // 2. Busca de Convites Ativos
+      const { data: invites } = await supabase
+        .from('invites')
+        .select('code')
+        .eq('owner_id', user.id)
+        .eq('status', 'disponivel');
+      if (invites) setMyInvites(invites);
+
+      // 3. Feed de Áudio Completo
       const { data: postsData } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
       const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url');
       const { data: comments } = await supabase.from('audio_comments').select('*');
@@ -114,7 +114,9 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    fetchData(); 
+  }, [fetchData]);
 
   const handleTutorialComplete = () => {
     localStorage.setItem('ouvi_tutorial_seen', 'true');
@@ -148,7 +150,7 @@ export default function DashboardPage() {
           {/* LADO A: FEED GERAL */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 px-4 scrollbar-hide">
             
-            {/* BOTÃO ÚNICO DE CONVITES COM PULSAÇÃO SUTIL */}
+            {/* Botão de Convites Dinâmico */}
             {myInvites.length > 0 && (
               <div className="mt-8 mb-4 flex justify-center">
                 <motion.button 
@@ -163,8 +165,8 @@ export default function DashboardPage() {
                   }}
                   transition={{ 
                     duration: 3, 
-                    repeat: 2, // Pulsa 3 vezes
-                    repeatDelay: 10, // Depois descansa 10 segundos
+                    repeat: Infinity, 
+                    repeatDelay: 8,
                     ease: "easeInOut" 
                   }}
                   className="bg-white text-black px-10 py-3 rounded-full text-[11px] font-black tracking-[2px] shadow-2xl active:scale-95 transition-all"
