@@ -4,8 +4,9 @@ import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
 import { notifyArrival } from './telegramService';
+import { motion } from 'framer-motion';
 
-// ID do Perfil Oficial do App para os 3 posts diários (Ajuste com o ID real do seu banco)
+// ID do Perfil Oficial do App para posts de sistema
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000"; 
 
 export default function DashboardPage() {
@@ -16,6 +17,7 @@ export default function DashboardPage() {
   const [myInvites, setMyInvites] = useState<any[]>([]);
   const [showTelegramBanner, setShowTelegramBanner] = useState(false);
 
+  // O Link da sua Sintonia Direta
   const TELEGRAM_LINK = "https://t.me/+vMOnG-2fI_E4ZTRh";
 
   const fetchData = useCallback(async () => {
@@ -25,6 +27,7 @@ export default function DashboardPage() {
       setCurrentUser(user);
 
       if (user) {
+        // Verifica se o sintonizador já acessou o QG
         const hasJoined = localStorage.getItem('ouvi_joined_telegram');
         if (!hasJoined) setShowTelegramBanner(true);
 
@@ -34,12 +37,14 @@ export default function DashboardPage() {
           .eq('id', user.id)
           .single();
 
+        // Notifica o mestre no Telegram sobre a nova sintonização
         if (profileData && !profileData.welcome_sent) {
           const nick = profileData.username || "Novo Membro";
           await notifyArrival(nick);
           await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
 
+        // Busca convites disponíveis para manter a escassez
         const { data: invitesData } = await supabase
           .from('invites')
           .select('code, status')
@@ -49,7 +54,7 @@ export default function DashboardPage() {
         if (invitesData) setMyInvites(invitesData);
       }
 
-      // Busca posts tratando a possibilidade de campos nulos
+      // Busca o Feed (Silêncio ou Som)
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*')
@@ -64,7 +69,6 @@ export default function DashboardPage() {
         const userProfile = allProfiles?.find(p => p.id === post.user_id) || null;
         return {
           ...post,
-          // Garante que URLs nulas virem string vazia para não quebrar o player
           image_url: post.image_url || "",
           video_url: post.video_url || "",
           content_audio: post.content_audio || "",
@@ -117,11 +121,6 @@ export default function DashboardPage() {
           width: 100%;
           box-sizing: border-box;
         }
-        @keyframes pulse-social {
-          0% { transform: scale(1); opacity: 0.9; }
-          50% { transform: scale(1.02); opacity: 1; }
-          100% { transform: scale(1); opacity: 0.9; }
-        }
         .system-post-aura {
           border: 1px solid rgba(0, 242, 254, 0.3);
           border-radius: 16px;
@@ -131,26 +130,34 @@ export default function DashboardPage() {
       `}</style>
 
       <div className="content-container">
-        <div style={styles.header}>
+        <header style={styles.header}>
           <h1 style={styles.brand}>OUVI</h1>
+          
+          {/* Botão QG Telegram Pulsante */}
           {showTelegramBanner && (
-            <button onClick={handleJoinTelegram} style={styles.socialButton}>
-              <span style={styles.socialText}>ENTRAR NO CÍRCULO</span>
-              <span>🎙️</span>
-            </button>
+            <motion.button 
+              onClick={handleJoinTelegram} 
+              style={styles.socialButton}
+              animate={{ boxShadow: ["0 0 10px #00f2fe22", "0 0 25px #00f2fe66", "0 0 10px #00f2fe22"] }}
+              transition={{ duration: 2, repeat: Infinity }}
+            >
+              <span style={styles.socialText}>QG SINTONIA</span>
+              <span style={{fontSize: '12px'}}>🎙️</span>
+            </motion.button>
           )}
-        </div>
+        </header>
 
+        {/* Módulo de Convites Exclusivos */}
         {myInvites.length > 0 && (
           <div style={styles.inviteContainer}>
-            <p style={styles.inviteTitle}>🎫 VOCÊ TEM {myInvites.length} ACESSOS EXCLUSIVOS</p>
+            <p style={styles.inviteTitle}>🎫 {myInvites.length} ACESSOS EXCLUSIVOS DISPONÍVEIS</p>
             <div style={styles.inviteList}>
               {myInvites.map((inv) => (
                 <span key={inv.code} style={styles.inviteCode}>{inv.code}</span>
               ))}
             </div>
             <p style={styles.inviteFooter}>
-              SINAL ESCASSO. NO PASSADO, CONVITES ASSIM VALIAM R$ 400. USE COM SABEDORIA.
+              USE COM SABEDORIA. O SINAL É ESCASSO.
             </p>
           </div>
         )}
@@ -182,26 +189,24 @@ export default function DashboardPage() {
 }
 
 const styles = {
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '10px 5px' },
-  brand: { color: '#fff', fontSize: '22px', fontWeight: '900' as const, letterSpacing: '4px', margin: 0 },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', padding: '15px 5px' },
+  brand: { color: '#fff', fontSize: '24px', fontWeight: '900' as const, letterSpacing: '6px', margin: 0 },
   socialButton: {
-    background: 'linear-gradient(45deg, #00f2fe, #4facfe)',
-    border: 'none',
-    borderRadius: '20px',
-    padding: '6px 12px',
+    background: 'rgba(0, 242, 254, 0.1)',
+    border: '1px solid #00f2fe',
+    borderRadius: '100px',
+    padding: '8px 16px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    animation: 'pulse-social 2s infinite ease-in-out',
-    boxShadow: '0 0 15px rgba(0, 242, 254, 0.2)'
+    gap: '8px',
   },
-  socialText: { color: '#000', fontSize: '9px', fontWeight: '900' as const, letterSpacing: '1px' },
-  loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' },
-  emptyText: { color: '#333', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' },
-  inviteContainer: { backgroundColor: '#111', border: '1px solid #00f2fe', padding: '20px', borderRadius: '16px', marginBottom: '25px', textAlign: 'center' as const },
-  inviteTitle: { color: '#00f2fe', fontSize: '10px', fontWeight: '900' as const, marginBottom: '12px', letterSpacing: '2px' },
-  inviteList: { display: 'flex', justifyContent: 'center', gap: '8px', flexWrap: 'wrap' as const },
-  inviteCode: { backgroundColor: '#00f2fe', color: '#000', padding: '5px 10px', fontSize: '12px', fontWeight: 'bold' as const, borderRadius: '6px' },
-  inviteFooter: { color: '#444', fontSize: '8px', marginTop: '15px', fontWeight: '700' as const, letterSpacing: '0.5px', textTransform: 'uppercase' as const }
+  socialText: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, letterSpacing: '2px' },
+  loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px', opacity: 0.5 },
+  emptyText: { color: '#222', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' },
+  inviteContainer: { backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(0, 242, 254, 0.1)', padding: '25px', borderRadius: '20px', marginBottom: '30px', textAlign: 'center' as const },
+  inviteTitle: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, marginBottom: '15px', letterSpacing: '2px', opacity: 0.8 },
+  inviteList: { display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' as const },
+  inviteCode: { border: '1px solid #00f2fe', color: '#00f2fe', padding: '6px 12px', fontSize: '12px', fontWeight: '900' as const, borderRadius: '8px', background: 'rgba(0, 242, 254, 0.05)' },
+  inviteFooter: { color: '#333', fontSize: '8px', marginTop: '15px', fontWeight: '900' as const, letterSpacing: '1px' }
 };
