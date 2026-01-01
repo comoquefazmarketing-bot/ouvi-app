@@ -4,7 +4,7 @@
  */
 
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReplyInput from './ReplyInput'; 
@@ -14,37 +14,48 @@ export default function ThreadDrawer({ post, onClose }: { post: any, onClose: ()
   const [replies, setReplies] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchReplies = async () => {
+  const fetchReplies = useCallback(async () => {
     if (!post?.id) return;
     setLoading(true);
     
     try {
-      // Sincronizado com a tabela audio_comments do seu Supabase
+      // 1. Busca os comentários da tabela audio_comments
       const { data, error } = await supabase
         .from('audio_comments') 
-        .select('*, profiles(username, avatar_url)') 
+        .select(`
+          *,
+          profiles (
+            username,
+            avatar_url
+          )
+        `) 
         .eq('post_id', post.id)
         .order('created_at', { ascending: true });
       
       if (error) throw error;
 
-      // Mapeamento: se o perfil não existir, usamos o username da própria linha
-      const enrichedData = (data || []).map(r => ({
-        ...r,
-        display_name: r.profiles?.username || r.username || "MEMBRO OUVI"
-      }));
+      // 2. Mapeamento de segurança: Garante que o CommentItem receba o que precisa
+      const enrichedData = (data || []).map(r => {
+        const profile = Array.isArray(r.profiles) ? r.profiles[0] : r.profiles;
+        return {
+          ...r,
+          // Unificamos onde o nome e a foto ficam para o CommentItem não se perder
+          display_name: profile?.username || r.username || "MEMBRO OUVI",
+          avatar_url: profile?.avatar_url || "/default-avatar.png"
+        };
+      });
 
       setReplies(enrichedData);
     } catch (err) {
-      console.error("Falha na sintonização:", err);
+      console.error("Falha na sintonização das vozes:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [post?.id]);
 
   useEffect(() => {
     fetchReplies();
-  }, [post?.id]);
+  }, [fetchReplies]);
 
   if (!post) return null;
 
@@ -73,13 +84,12 @@ export default function ThreadDrawer({ post, onClose }: { post: any, onClose: ()
         </div>
 
         <div style={styles.scrollContent}>
-          {/* POST ORIGINAL - USANDO .CONTENT DO BANCO */}
+          {/* POST ORIGINAL */}
           <div style={styles.headerPost}>
              <h4 style={styles.authorTitle}>
                 {post.profiles?.username || post.username || "MEMBRO OUVI"}
              </h4>
              <p style={styles.postText}>
-                {/* Garantimos que o texto do post apareça aqui */}
                 {post.content || post.text || "Sintonizando descrição..."}
              </p>
           </div>
@@ -95,14 +105,16 @@ export default function ThreadDrawer({ post, onClose }: { post: any, onClose: ()
                  />
                ))
              ) : (
-               <p style={styles.emptyText}>
-                 {loading ? "SINTONIZANDO..." : "SILÊNCIO SINTONIZADO..."}
-               </p>
+               <div style={styles.emptyContainer}>
+                 <p style={styles.emptyText}>
+                   {loading ? "SINTONIZANDO..." : "SILÊNCIO SINTONIZADO..."}
+                 </p>
+               </div>
              )}
           </div>
         </div>
 
-        {/* REATOR DE RESPOSTA */}
+        {/* REATOR DE RESPOSTA (O Microfone Intocável) */}
         <div style={styles.inputWrapper}>
           <ReplyInput 
             postId={post.id} 
@@ -134,18 +146,20 @@ const styles = {
   scrollContent: { 
     flex: 1, 
     overflowY: 'auto' as const, 
-    padding: '0 20px 120px 20px', 
+    padding: '0 20px 140px 20px', 
     WebkitOverflowScrolling: 'touch' as const
   },
-  headerPost: { paddingBottom: '20px', borderBottom: '1px solid #111' },
-  authorTitle: { color: '#00f2fe', fontSize: '10px', fontWeight: '900' as const, letterSpacing: '2px' },
+  headerPost: { padding: '10px 0 20px 0', borderBottom: '1px solid #111' },
+  authorTitle: { color: '#00f2fe', fontSize: '10px', fontWeight: '900' as const, letterSpacing: '2px', textTransform: 'uppercase' as const },
   postText: { color: '#fff', fontSize: '16px', marginTop: '10px', lineHeight: '1.4', fontWeight: '400' },
-  repliesContainer: { marginTop: '25px', display: 'flex', flexDirection: 'column' as const, gap: '20px' },
-  emptyText: { color: '#222', fontSize: '9px', textAlign: 'center' as const, marginTop: '60px', fontWeight: '900' as const, letterSpacing: '3px' },
+  repliesContainer: { marginTop: '25px', display: 'flex', flexDirection: 'column' as const, gap: '24px' },
+  emptyContainer: { marginTop: '60px', textAlign: 'center' as const },
+  emptyText: { color: '#222', fontSize: '9px', fontWeight: '900' as const, letterSpacing: '3px' },
   inputWrapper: { 
     position: 'absolute' as const, bottom: 0, width: '100%', 
     backgroundColor: '#050505', borderTop: '1px solid #111',
     paddingBottom: 'env(safe-area-inset-bottom)',
-    boxSizing: 'border-box' as const
+    boxSizing: 'border-box' as const,
+    zIndex: 10
   }
 };
