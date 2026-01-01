@@ -1,10 +1,4 @@
-﻿/**
- * PROJETO OUVI – Dashboard / Feed Principal
- * Versão 2026 - Correção Total de Cabeçalho e Prévias
- * Foco: Compatibilidade de Perfis e Estabilidade
- */
-
-"use client";
+﻿"use client";
 import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
@@ -20,84 +14,68 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // 1. Identifica o usuário logado
+      // 1. Pega o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 2. BUSCA SINTONIZADA: Puxamos o post e os comentários com seus perfis
-      const { data, error } = await supabase
+      // 2. Busca os posts puros (sem relações para não travar)
+      const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select(`
-          *,
-          profiles (
-            id, 
-            username, 
-            avatar_url
-          ),
-          audio_comments (
-            id,
-            content,
-            username,
-            created_at,
-            profiles (
-              username,
-              avatar_url
-            )
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (postsError) throw postsError;
 
-      if (data) {
-        // 3. TRATAMENTO DE DADOS ELITE
-        const formattedPosts = data.map(post => {
-          // Garante que o perfil do autor do post não venha como array
-          const rawProfile = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
-          
-          return {
-            ...post,
-            // Reconstruímos o objeto profile para o PostCard ler com facilidade
-            profiles: rawProfile || { username: 'membro', avatar_url: '/default-avatar.png' },
-            // Ordenamos as prévias de comentários
-            audio_comments: post.audio_comments?.sort((a: any, b: any) => 
-              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            ) || []
-          };
-        });
+      // 3. Busca todos os perfis de uma vez
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, username, avatar_url');
+
+      // 4. Busca os comentários para as prévias
+      const { data: commentsData } = await supabase
+        .from('audio_comments')
+        .select('*');
+
+      // 5. MONTAGEM MANUAL (A prova de falhas)
+      const merged = (postsData || []).map(post => {
+        // Encontra o perfil do dono do post
+        const userProfile = profilesData?.find(p => p.id === post.user_id) || null;
         
-        setPosts(formattedPosts);
-      }
+        // Encontra os comentários deste post para a prévia
+        const postComments = (commentsData || [])
+          .filter(c => c.post_id === post.id)
+          .map(c => {
+            // Injeta o perfil de quem comentou dentro do comentário
+            const commenterProfile = profilesData?.find(p => p.id === c.user_id);
+            return { ...c, profiles: commenterProfile };
+          });
 
+        return {
+          ...post,
+          // Injeta o perfil no post (mantemos 'profiles' e 'profile' para compatibilidade)
+          profiles: userProfile,
+          profile: userProfile,
+          audio_comments: postComments
+        };
+      });
+
+      setPosts(merged);
     } catch (err: any) {
-      console.error("Erro na sintonização do feed:", err.message);
-      // Fallback de segurança para não sumir com o feed
-      const { data: fallback } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
-      setPosts(fallback || []);
+      console.error("Erro na sintonização:", err.message);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { 
-    fetchData(); 
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px', position: 'relative' }}>
+    <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', padding: '10px' }}>
         
-        {loading && (
-          <div style={styles.statusContainer}>
-             <p style={styles.loadingText}>SINTONIZANDO VOZES...</p>
-          </div>
-        )}
+        {loading && <p style={styles.loadingText}>SINTONIZANDO...</p>}
         
-        {!loading && posts.length === 0 && (
-          <div style={styles.statusContainer}>
-             <p style={styles.emptyText}>O SILÊNCIO É PROFUNDO.</p>
-          </div>
-        )}
+        {!loading && posts.length === 0 && <p style={styles.emptyText}>SILÊNCIO ABSOLUTO.</p>}
 
         {posts.map((post) => (
           <PostCard 
@@ -111,17 +89,13 @@ export default function DashboardPage() {
       </div>
       
       {selectedPost && (
-        <ThreadDrawer 
-          post={selectedPost} 
-          onClose={() => setSelectedPost(null)} 
-        />
+        <ThreadDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
       )}
     </div>
   );
 }
 
 const styles = {
-  statusContainer: { marginTop: '80px', textAlign: 'center' as const },
-  loadingText: { color: '#00f2fe', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '3px' },
-  emptyText: { color: '#333', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' }
+  loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' },
+  emptyText: { color: '#333', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' }
 };
