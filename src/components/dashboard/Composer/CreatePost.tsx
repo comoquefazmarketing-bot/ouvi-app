@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useRef } from "react";
 import { supabase } from "../../../lib/supabaseClient";
@@ -41,7 +41,7 @@ export default function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
         .upload(filePath, selectedMedia);
 
       if (uploadError) {
-        alert("Erro ao enviar imagem ou vídeo.");
+        alert("Erro ao enviar imagem ou v­deo.");
         setIsPublishing(false);
         return;
       }
@@ -67,21 +67,21 @@ export default function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
 
   return (
     <div style={styles.card}>
-      {/* Botão de seleção inicial se não houver mídia */}
+      {/* Bot£o de sele§£o inicial se n£o houver m­dia */}
       {!mediaPreviewUrl && (
         <button 
           onClick={() => fileInputRef.current?.click()} 
           style={styles.bigSelectBtn}
         >
-          <span>📸</span>
-          Compartilhar Foto ou Vídeo
+          <span>“¸</span>
+          Compartilhar Foto ou V­deo
         </button>
       )}
 
-      {/* Espaço da Prévia Visual com Legenda */}
+      {/* Espa§o da Pr©via Visual com Legenda */}
       {mediaPreviewUrl && (
         <div style={styles.previewContainer}>
-          <img src={mediaPreviewUrl} alt="Prévia" style={styles.previewImg} />
+          <img src={mediaPreviewUrl} alt="Pr©via" style={styles.previewImg} />
           
           <div style={styles.captionOverlay}>
             <textarea
@@ -97,7 +97,7 @@ export default function CreatePostCard({ onPostCreated }: CreatePostCardProps) {
             onClick={() => {setMediaPreviewUrl(null); setSelectedMedia(null);}} 
             style={styles.removeBtn}
           >
-            Trocar Mídia
+            Trocar M­dia
           </button>
         </div>
       )}

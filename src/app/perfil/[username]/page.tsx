@@ -1,25 +1,25 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Home, User, Mic, Search } from 'lucide-react'; // Ícones modernos
+import { Home, User, Mic, Search } from 'lucide-react'; // cones modernos
 
 export default function DashboardPage() {
   const [tab, setTab] = useState(0); // 0 = Geral, 1 = Perfil
 
-  // Função para o botão Home
+  // Fun§£o para o bot£o Home
   const irParaHome = () => setTab(0);
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden flex flex-col">
       
-      {/* 1. Header de Seleção (Estilo Instagram/TikTok) */}
+      {/* 1. Header de Sele§£o (Estilo Instagram/TikTok) */}
       <div className="flex justify-center gap-8 py-4 border-b border-zinc-900 bg-black/80 backdrop-blur-md z-50">
         <button 
           onClick={() => setTab(0)}
           className={`text-sm font-bold transition-all duration-300 ${tab === 0 ? 'text-white scale-110' : 'text-zinc-500'}`}
         >
-          PARA VOCÊ
+          PARA VOCŠ
         </button>
         <button 
           onClick={() => setTab(1)}
@@ -41,10 +41,10 @@ export default function DashboardPage() {
           if (info.offset.x > 100) setTab(0);  // Deslizou para a direita -> Home
         }}
       >
-        {/* LADO A: FEED CRONOLÓGICO */}
+        {/* LADO A: FEED CRONOL“GICO */}
         <div className="w-[100vw] h-full overflow-y-auto pb-32">
            {/* Aqui entra o seu componente <FeedGeral /> */}
-           <div className="p-10 text-center text-zinc-500">Conteúdo do Feed Geral...</div>
+           <div className="p-10 text-center text-zinc-500">Conteºdo do Feed Geral...</div>
         </div>
 
         {/* LADO B: GRADE 3x3 DO PERFIL */}
@@ -54,7 +54,7 @@ export default function DashboardPage() {
         </div>
       </motion.div>
 
-      {/* 3. BARRA DE NAVEGAÇÃO INFERIOR (Onde fica o Botão Home) */}
+      {/* 3. BARRA DE NAVEGA‡ƒO INFERIOR (Onde fica o Bot£o Home) */}
       <nav className="fixed bottom-0 w-full bg-black/90 border-t border-zinc-900 pb-6 pt-3 px-10 flex justify-between items-center z-[100]">
         <button onClick={irParaHome} className={`p-2 transition ${tab === 0 ? 'text-white' : 'text-zinc-600'}`}>
           <Home size={28} fill={tab === 0 ? "white" : "none"} />
@@ -62,7 +62,7 @@ export default function DashboardPage() {
         
         <button className="text-zinc-600 p-2"><Search size={28} /></button>
         
-        {/* Botão Central de Postar (Destaque) */}
+        {/* Bot£o Central de Postar (Destaque) */}
         <button className="bg-white text-black p-3 rounded-full -mt-10 shadow-lg shadow-white/10 active:scale-90 transition">
           <Mic size={32} />
         </button>

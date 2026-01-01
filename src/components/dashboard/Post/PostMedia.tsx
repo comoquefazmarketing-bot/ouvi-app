@@ -1,33 +1,29 @@
-"use client";
-
+﻿"use client";
 import React from "react";
 
 export default function PostMedia({ url }: { url: string }) {
   if (!url) return null;
 
   return (
-    <div style={styles.container}>
+    <div style={{ 
+      width: "100%", 
+      padding: "0 12px", 
+      boxSizing: "border-box" 
+    }}>
       <img 
         src={url} 
-        alt="Conteúdo do post" 
-        style={styles.image} 
+        alt="Conteúdo" 
+        style={{ 
+          width: "100%", 
+          height: "auto", // Deixa a imagem ditar a própria altura
+          maxHeight: "650px", // Limite apenas para não quebrar o scroll infinito
+          objectFit: "contain", // Garante que nada da foto seja cortado
+          borderRadius: "24px",
+          display: "block",
+          backgroundColor: "#050505" // Fundo neutro caso a imagem tenha transparência
+        }} 
         loading="lazy"
       />
     </div>
   );
 }
-
-const styles = {
-  container: { 
-    width: "100%", 
-    padding: "0 10px", // Pequeno respiro lateral
-    boxSizing: "border-box" as "border-box" 
-  },
-  image: { 
-    width: "100%", 
-    aspectRatio: "1/1", 
-    objectFit: "cover" as "cover", 
-    borderRadius: "20px",
-    display: "block"
-  }
-};

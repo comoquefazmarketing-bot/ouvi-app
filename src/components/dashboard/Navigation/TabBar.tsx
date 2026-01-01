@@ -1,5 +1,5 @@
-/**
- * PROJETO OUVI — TabBar de Alta Precisão
+﻿/**
+ * PROJETO OUVI €” TabBar de Alta Precis£o
  * Autor: Felipe Makarios
  * Assinatura Digital: F-M-A-K-A-R-I-O-S
  */
@@ -19,9 +19,9 @@ const TabBar = ({ onPlusClick }: TabBarProps) => {
   const pathname = usePathname();
 
   const tabs = [
-    { icon: <Home size={22} />, path: "/dashboard", label: "Início" },
+    { icon: <Home size={22} />, path: "/dashboard", label: "In­cio" },
     { icon: <Search size={22} />, path: "/dashboard/search", label: "Explorar" },
-    { icon: null, path: null, isPlus: true }, // O botão central
+    { icon: null, path: null, isPlus: true }, // O bot£o central
     { icon: <Bell size={22} />, path: "/dashboard/notifications", label: "Alertas" },
     { icon: <User size={22} />, path: "/dashboard/profile", label: "Perfil" },
   ];
@@ -99,7 +99,7 @@ const styles = {
     justifyContent: "center",
     cursor: "pointer",
     boxShadow: "0 0 15px rgba(0, 242, 254, 0.4)",
-    marginTop: "-25px", // Faz o botão saltar para fora da barra
+    marginTop: "-25px", // Faz o bot£o saltar para fora da barra
   },
   activeDot: {
     position: "absolute" as "absolute",

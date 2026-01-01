@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
@@ -12,7 +12,7 @@ export default function InstaDrawer({ postId, open, onClose }: any) {
   useEffect(() => {
     if (open && postId) {
       setLoading(true);
-      // Busca áudios e perfis para mostrar avatar e nome
+      // Busca ¡udios e perfis para mostrar avatar e nome
       supabase.from("audio_comments")
         .select("*, profiles(avatar_url, full_name)")
         .eq("post_id", postId)
@@ -52,8 +52,8 @@ export default function InstaDrawer({ postId, open, onClose }: any) {
             <div style={{ width: 45, height: 5, background: "#333", borderRadius: 10, margin: "0 auto 15px" }} />
             
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, padding: "0 10px" }}>
-              <span style={{ color: "#fff", fontWeight: "bold", fontSize: "16px" }}>Comentários</span>
-              <span style={{ color: "#555", fontSize: "12px" }}>{comments.length} áudios</span>
+              <span style={{ color: "#fff", fontWeight: "bold", fontSize: "16px" }}>Coment¡rios</span>
+              <span style={{ color: "#555", fontSize: "12px" }}>{comments.length} ¡udios</span>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", paddingBottom: "120px" }}>
@@ -71,21 +71,21 @@ export default function InstaDrawer({ postId, open, onClose }: any) {
                          <img src={`https://github.com/identicons/${c.user_id}.png`} style={{width: '100%'}} />
                       </div>
                       <span style={{ color: "#fff", fontSize: "13px", fontWeight: 500 }}>@{c.user_email?.split('@')[0]}</span>
-                      {index === 0 && <span style={{ marginLeft: "auto", fontSize: "14px" }}>🏆</span>}
+                      {index === 0 && <span style={{ marginLeft: "auto", fontSize: "14px" }}>†</span>}
                     </div>
                     
                     <audio controls src={c.audio_url} style={{ width: "100%", height: "35px", filter: "invert(1)" }} />
                     
                     <div style={{ display: "flex", gap: "20px", marginTop: "12px", fontSize: "11px", color: "#666" }}>
-                      <span style={{ cursor: "pointer" }}>❤️ Curtir</span>
-                      <span style={{ cursor: "pointer" }}>💬 Responder</span>
+                      <span style={{ cursor: "pointer" }}>ï¸ Curtir</span>
+                      <span style={{ cursor: "pointer" }}>’¬ Responder</span>
                     </div>
                   </div>
                 ))
               )}
             </div>
 
-            {/* BOTÃO GRAVAR BLACK PIANO */}
+            {/* BOTƒO GRAVAR BLACK PIANO */}
             <div style={{ position: "absolute", bottom: 30, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", background: "linear-gradient(to top, #050505 80%, transparent)" }}>
               <motion.button
                 onMouseDown={startRecording} onMouseUp={stopRecording}
@@ -99,7 +99,7 @@ export default function InstaDrawer({ postId, open, onClose }: any) {
                   display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px"
                 }}
               >
-                {isRecording ? "🔴" : "🎤"}
+                {isRecording ? "”´" : "Ž"}
               </motion.button>
               <span style={{ color: isRecording ? "#ff0000" : "#444", fontSize: "11px", marginTop: "10px", fontWeight: "bold" }}>
                 {isRecording ? "GRAVANDO..." : "SEGURE PARA GRAVAR"}

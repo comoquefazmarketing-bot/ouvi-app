@@ -1,5 +1,5 @@
-/**
- * PROJETO OUVI — Header Minimalista
+﻿/**
+ * PROJETO OUVI €” Header Minimalista
  * Local: E:\OUVI\ouvi-app\src\components\dashboard\Header\Header.tsx
  * Autor: Felipe Makarios
  */
@@ -12,7 +12,7 @@ export default function Header() {
   return (
     <header style={styles.headerWrapper}>
       <div style={styles.brandGroup}>
-        {/* Logo Icon - Mantendo a proporção */}
+        {/* Logo Icon - Mantendo a propor§£o */}
         <img 
           src="/logo-dashboard.svg" 
           alt="OUVI" 
@@ -29,7 +29,7 @@ const styles = {
   headerWrapper: {
     width: '100%', 
     height: '65px', 
-    background: 'rgba(0, 0, 0, 0.8)', // Um pouco mais escuro para destacar o conteúdo
+    background: 'rgba(0, 0, 0, 0.8)', // Um pouco mais escuro para destacar o conteºdo
     backdropFilter: 'blur(20px)', 
     WebkitBackdropFilter: 'blur(20px)', // Suporte para Safari (iOS)
     borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
@@ -52,9 +52,9 @@ const styles = {
   },
   brandName: { 
     color: '#fff', 
-    fontSize: '16px', // Ajustado para ser elegante, não gritante
+    fontSize: '16px', // Ajustado para ser elegante, n£o gritante
     fontWeight: '900' as const, 
-    letterSpacing: '6px', // Espaçamento mais largo para luxo
+    letterSpacing: '6px', // Espa§amento mais largo para luxo
     marginLeft: '4px'
   }
 };

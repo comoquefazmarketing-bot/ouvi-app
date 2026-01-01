@@ -1,5 +1,5 @@
-/**
- * PROJETO OUVI — Tela de Login (VISUAL + LÓGICA SUPABASE)
+﻿/**
+ * PROJETO OUVI €” Tela de Login (VISUAL + L“GICA SUPABASE)
  * Autor: Felipe Makarios
  */
 
@@ -7,7 +7,7 @@
 
 import React from "react";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabaseClient"; // Verifique se este caminho está correto no seu projeto
+import { supabase } from "@/lib/supabaseClient"; // Verifique se este caminho est¡ correto no seu projeto
 
 const ImmersiveBackground = () => {
   const layers = [
@@ -48,7 +48,7 @@ const ImmersiveBackground = () => {
 
 export default function LoginPage() {
   
-  // FUNÇÃO REAL DE LOGIN DO SUPABASE
+  // FUN‡ƒO REAL DE LOGIN DO SUPABASE
   const handleLogin = async (provider: 'google' | 'tiktok' | 'instagram') => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -84,10 +84,10 @@ export default function LoginPage() {
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         />
         
-        <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
+        <p style={styles.tagline}>A FREQUŠNCIA DO SEU MUNDO</p>
 
         <div style={styles.buttonGroup}>
-          {/* BOTÃO GOOGLE FUNCIONAL */}
+          {/* BOTƒO GOOGLE FUNCIONAL */}
           <motion.button
             onClick={() => handleLogin('google')}
             style={styles.premiumBtn}
@@ -97,7 +97,7 @@ export default function LoginPage() {
             <span style={styles.btnText}>GOOGLE ACCESS</span>
           </motion.button>
 
-          {/* BOTÃO TIKTOK */}
+          {/* BOTƒO TIKTOK */}
           <motion.button
             onClick={() => handleLogin('tiktok' as any)}
             style={styles.premiumBtn}
@@ -107,7 +107,7 @@ export default function LoginPage() {
             <span style={styles.btnText}>TIKTOK SYNC</span>
           </motion.button>
 
-          {/* BOTÃO INSTAGRAM */}
+          {/* BOTƒO INSTAGRAM */}
           <motion.button
             onClick={() => handleLogin('instagram' as any)}
             style={{ ...styles.premiumBtn, color: "#f09433", borderColor: "rgba(240, 148, 51, 0.4)" }}

@@ -1,5 +1,5 @@
-/**
- * PROJETO OUVI — Onboarding de Alta Fidelidade (Consolidado)
+﻿/**
+ * PROJETO OUVI €” Onboarding de Alta Fidelidade (Consolidado)
  * Local: E:\OUVI\ouvi-app\src\app\onboarding\page.tsx
  * Autor: Felipe Makarios
  */
@@ -23,7 +23,7 @@ const VoicePulse = () => (
         transition={{ duration: 1.5, repeat: Infinity, delay: i * 0.4, ease: "easeOut" }}
       />
     ))}
-    <span style={{ fontSize: "32px", zIndex: 10 }}>🎤</span>
+    <span style={{ fontSize: "32px", zIndex: 10 }}>Ž</span>
   </div>
 );
 
@@ -37,7 +37,7 @@ export default function OnboardingPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const router = useRouter();
 
-  // Verifica autenticação e tenta pré-carregar o nome
+  // Verifica autentica§£o e tenta pr©-carregar o nome
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -58,7 +58,7 @@ export default function OnboardingPage() {
     if (file) {
       setImageFile(file);
       setPreview(URL.createObjectURL(file));
-      // Transição suave para o próximo passo após seleção
+      // Transi§£o suave para o pr³ximo passo ap³s sele§£o
       setTimeout(() => setStep(2), 1000);
     }
   };
@@ -88,7 +88,7 @@ export default function OnboardingPage() {
         publicAvatarUrl = urlData.publicUrl;
       }
 
-      // 2. Upsert no Perfil (Cria ou atualiza o perfil do usuário)
+      // 2. Upsert no Perfil (Cria ou atualiza o perfil do usu¡rio)
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         username: nickname.trim().toLowerCase(),
@@ -98,7 +98,7 @@ export default function OnboardingPage() {
 
       if (profileError) throw profileError;
 
-      // 3. Finalização e Redirecionamento
+      // 3. Finaliza§£o e Redirecionamento
       setStep(3);
       setTimeout(() => {
         router.push("/dashboard");
@@ -156,7 +156,7 @@ export default function OnboardingPage() {
             transition={{ duration: 0.5 }}
             style={styles.content}
           >
-            <h2 style={styles.question}>COMO VOCÊ QUER SER CHAMADO?</h2>
+            <h2 style={styles.question}>COMO VOCŠ QUER SER CHAMADO?</h2>
             <div style={styles.micArea}>
               {isListening ? <VoicePulse /> : (
                 <motion.button 
@@ -164,7 +164,7 @@ export default function OnboardingPage() {
                   whileTap={{ scale: 0.9 }}
                   onClick={() => setIsListening(true)}
                   style={styles.staticMic}
-                >🎤</motion.button>
+                >Ž</motion.button>
               )}
             </div>
             <div style={styles.inputWrapper}>
@@ -209,7 +209,7 @@ export default function OnboardingPage() {
             >
               BEM-VINDO!
             </motion.h1>
-            <p style={styles.subtext}>A FREQUÊNCIA ESTÁ ATIVA</p>
+            <p style={styles.subtext}>A FREQUŠNCIA EST ATIVA</p>
           </motion.div>
         )}
       </AnimatePresence>

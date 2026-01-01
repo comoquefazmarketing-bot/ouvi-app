@@ -1,178 +1,125 @@
-/**
- * PROJETO OUVI — ReactionBar (Comentários e Feed)
- * Foco: Visibilidade Total e Ergonomia na Direita
+﻿/**
+ * PROJETO OUVI – ReactionBar ELITE (Sintonizado)
+ * Ajustes: Microfone Portal, Coração Dinâmico e Raio Eletrificado
  */
 
 "use client";
-import React, { useState, useRef, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
-import { motion, AnimatePresence } from "framer-motion";
+import React, { useState } from "react";
+import { motion, useAnimation } from "framer-motion";
 
-export default function ReactionBar({ 
-  postId, 
-  commentId, 
-  initialReactions, 
-  onUploadComplete,
-  onOpenThread 
-}: any) {
-  const [recording, setRecording] = useState(false);
-  const [reactions, setReactions] = useState(initialReactions || { loved_by: [], energy: 0 });
-  const [userId, setUserId] = useState<string | null>(null);
-  const [realCommentCount, setRealCommentCount] = useState(0);
-  
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+export default function ReactionBar({ postId, commentId, initialReactions, onOpenThread }: any) {
+  const [liked, setLiked] = useState(false);
+  const [isElectrified, setIsElectrified] = useState(false);
+  const [reactions] = useState(initialReactions || { loved_by: [], energy: 0 });
 
-  useEffect(() => {
-    const loadData = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) setUserId(user.id);
-
-      // Busca respostas específicas deste comentário ou post
-      const targetId = commentId || postId;
-      const { count, error } = await supabase
-        .from("audio_comments")
-        .select("*", { count: 'exact', head: true })
-        .eq(commentId ? "parent_id" : "post_id", targetId);
-      
-      if (!error) setRealCommentCount(count || 0);
-    };
-
-    loadData();
-  }, [postId, commentId]);
-
-  const hasLoved = userId && reactions?.loved_by?.includes(userId);
-
-  // Lógica de Gravação (Core Intocável)
-  const startRecording = async (e: any) => {
+  // 1. Lógica do Portal (Microfone)
+  const handlePortal = (e: any) => {
     e.stopPropagation();
-    if (e.cancelable) e.preventDefault();
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      chunksRef.current = [];
-      recorder.ondataavailable = (ev) => chunksRef.current.push(ev.data);
-      recorder.onstop = async () => {
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const fileName = `${Date.now()}-${userId}.webm`;
-        const path = `responses/${fileName}`;
-        const { error: uploadError } = await supabase.storage.from("audio-posts").upload(path, blob);
-        if (!uploadError) {
-          const { data: { publicUrl } } = supabase.storage.from("audio-posts").getPublicUrl(path);
-          await supabase.from("audio_comments").insert({
-            post_id: postId,
-            parent_id: commentId || null,
-            audio_url: publicUrl,
-            user_id: userId,
-            content: "🎙️ Resposta de voz"
-          });
-          setRealCommentCount(prev => prev + 1);
-          if (onUploadComplete) onUploadComplete();
-        }
-        stream.getTracks().forEach(t => t.stop());
-      };
-      recorder.start();
-      setRecording(true);
-    } catch (err) { console.warn("Erro no Mic"); }
+    if (onOpenThread) onOpenThread(commentId || postId);
   };
 
-  const stopRecording = (e: any) => {
+  // 2. Supermotion do Raio
+  const triggerEnergy = (e: any) => {
     e.stopPropagation();
-    if (mediaRecorderRef.current && recording) {
-      mediaRecorderRef.current.stop();
-      setRecording(false);
-    }
+    setIsElectrified(true);
+    setTimeout(() => setIsElectrified(false), 1500); // Duração do choque
   };
 
   return (
     <div style={styles.wrapper} onClick={(e) => e.stopPropagation()}>
-      <motion.div 
-        layout
-        initial={{ opacity: 0, y: 5 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={styles.pill}
-      >
-        {/* INTERAÇÕES (ESQUERDA) */}
-        <div style={styles.btnGroup}>
-          <button style={styles.btn}>
-            <span style={styles.emoji}>{hasLoved ? "❤️" : "🤍"}</span>
-            <span style={styles.count}>{reactions?.loved_by?.length || 0}</span>
-          </button>
+      {/* Efeito de Choque no Post (Overlay Invisível que brilha) */}
+      {isElectrified && (
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: [0, 0.8, 0] }}
+          style={styles.shockOverlay}
+        />
+      )}
 
-          <button 
-            onClick={() => onOpenThread && onOpenThread(commentId)} 
-            style={styles.btn}
+      <motion.div layout style={styles.pill}>
+        <div style={styles.leftGroup}>
+          
+          {/* RAIO - O DISPARADOR DE ENERGIA */}
+          <motion.button 
+            onClick={triggerEnergy}
+            whileHover={{ scale: 1.3, rotate: -20 }}
+            whileTap={{ scale: 0.7 }}
+            style={styles.iconBtn}
+          >
+            <motion.span 
+              animate={isElectrified ? { filter: ["drop-shadow(0 0 2px #ffdf00)", "drop-shadow(0 0 20px #ffdf00)", "drop-shadow(0 0 2px #ffdf00)"] } : {}}
+              style={{...styles.emoji, color: "#ffdf00"}}
+            >
+              ⚡
+            </motion.span>
+            <span style={styles.count}>{reactions?.energy || 0}</span>
+          </motion.button>
+
+          {/* COMENTÁRIOS */}
+          <motion.button 
+            onClick={handlePortal}
+            whileHover={{ y: -3 }}
+            style={styles.iconBtn}
           >
             <span style={styles.emoji}>💬</span>
-            <span style={styles.count}>{realCommentCount}</span>
-          </button>
-        </div>
+          </motion.button>
 
-        {/* MICROFONE (DIREITA - ALCANCE DO POLEGAR) */}
-        <div style={styles.resContainer}>
-          <AnimatePresence>
-            {recording && (
-              <div style={{ position: 'absolute' }}>
-                <motion.div initial={{ scale: 1, opacity: 0.6 }} animate={{ scale: 2.5, opacity: 0 }} transition={{ repeat: Infinity, duration: 1 }} style={styles.wave} />
-              </div>
-            )}
-          </AnimatePresence>
+          {/* MICROFONE - O PORTAL (CORRIGIDO) */}
+          <div style={styles.micWrapper}>
+            <motion.div 
+              onClick={handlePortal}
+              whileHover={{ scale: 1.1, boxShadow: "0 0 15px #00f2fe" }}
+              whileTap={{ scale: 0.9 }}
+              style={styles.innerMic}
+            >
+              <span style={{ fontSize: "20px" }}>🎙️</span>
+            </motion.div>
+          </div>
 
-          <motion.div 
-            onPointerDown={startRecording} 
-            onPointerUp={stopRecording}
-            animate={recording ? { scale: 1.2, backgroundColor: "rgba(255, 0, 0, 0.4)" } : { scale: 1 }}
-            style={styles.innerRes}
+          {/* CORAÇÃO - BRANCO -> VERMELHO */}
+          <motion.button 
+            onClick={() => setLiked(!liked)}
+            whileTap={{ scale: 1.5 }}
+            style={styles.iconBtn}
           >
-            {!recording && (
-              <div style={styles.idleWrapper}>
-                <span style={styles.responderBtn}>RESPONDER</span>
-                <div style={styles.divider} />
-              </div>
-            )}
-            <span style={styles.emojiMic}>🎙️</span>
-          </motion.div>
+            <motion.span 
+              animate={{ 
+                scale: liked ? [1, 1.4, 1] : 1,
+                filter: liked 
+                  ? "grayscale(0) drop-shadow(0 0 8px #ff0000)" 
+                  : "grayscale(1) brightness(2)" 
+              }}
+              style={{...styles.emoji, color: liked ? "#ff0000" : "#fff"}}
+            >
+              ❤️
+            </motion.span>
+          </motion.button>
         </div>
+
+        <div style={styles.divider} />
+
+        <motion.button onClick={handlePortal} style={styles.threadBtn}>
+          O QUE ESTÃO FALANDO...
+        </motion.button>
       </motion.div>
     </div>
   );
 }
 
 const styles = {
-  wrapper: { 
-    width: "100%", 
-    display: "flex", 
-    justifyContent: "flex-end", // Alinha tudo na direita da tela
-    padding: "8px 0" 
+  wrapper: { position: "relative" as const, display: "flex", justifyContent: "flex-end", width: "100%" },
+  shockOverlay: {
+    position: "absolute" as const, top: -100, left: -500, right: -100, bottom: -100,
+    border: "2px solid #ffdf00", borderRadius: "40px", pointerEvents: "none" as const,
+    boxShadow: "inset 0 0 30px #ffdf00, 0 0 50px #ffdf00", zIndex: 99
   },
-  pill: { 
-    display: "inline-flex", 
-    alignItems: "center", 
-    gap: "12px", 
-    padding: "4px 8px 4px 14px", 
-    background: "rgba(15, 15, 15, 0.8)", 
-    backdropFilter: "blur(20px)", 
-    borderRadius: "100px", 
-    border: "1px solid rgba(255,255,255,0.08)",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.4)"
-  },
-  btnGroup: { display: "flex", gap: "12px", alignItems: "center" },
-  btn: { background: "none", border: "none", display: "flex", alignItems: "center", gap: "4px", cursor: "pointer" },
-  emoji: { fontSize: "14px" },
-  emojiMic: { fontSize: "16px" },
-  count: { fontSize: "11px", color: "#fff", fontWeight: "700" as const },
-  divider: { width: "1px", height: "10px", background: "rgba(255,255,255,0.1)", margin: "0 8px" },
-  resContainer: { position: "relative" as const, display: "flex", alignItems: "center", justifyContent: "center" },
-  innerRes: { 
-    display: "flex", 
-    alignItems: "center", 
-    justifyContent: "center", 
-    padding: "6px 10px", 
-    borderRadius: "100px", 
-    background: "rgba(0, 242, 254, 0.08)" 
-  },
-  idleWrapper: { display: "flex", alignItems: "center" },
-  responderBtn: { fontSize: "9px", fontWeight: "900" as const, color: "#00f2fe", letterSpacing: "0.5px" },
-  wave: { position: "absolute" as const, width: "30px", height: "30px", borderRadius: "100%", border: "2px solid #ff0000", pointerEvents: "none" as const }
+  pill: { display: "flex", alignItems: "center", padding: "5px 18px", background: "rgba(10,10,10,0.8)", backdropFilter: "blur(20px)", borderRadius: "100px", border: "1px solid rgba(255,255,255,0.1)", gap: "15px" },
+  leftGroup: { display: "flex", alignItems: "center", gap: "22px" },
+  iconBtn: { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" },
+  emoji: { fontSize: "19px", transition: "filter 0.3s ease" },
+  count: { fontSize: "11px", color: "#fff", fontWeight: "900" as const, marginLeft: "4px" },
+  micWrapper: { position: "relative" as const },
+  innerMic: { width: "42px", height: "42px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(0,242,254,0.1)", border: "1px solid rgba(0,242,254,0.2)" },
+  divider: { width: "1px", height: "18px", background: "rgba(255,255,255,0.1)", margin: "0 5px" },
+  threadBtn: { background: "none", border: "none", color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, letterSpacing: "1px", cursor: "pointer", textShadow: "0 0 8px #00f2fe" }
 };

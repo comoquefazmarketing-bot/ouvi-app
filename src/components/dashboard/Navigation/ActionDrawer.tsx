@@ -1,7 +1,7 @@
-/**
- * PROJETO OUVI — Estúdio de Criação Consolidado
+﻿/**
+ * PROJETO OUVI €” Estºdio de Cria§£o Consolidado
  * Autor: Felipe Makarios
- * Ajuste: Ergonomia para Polegar Direito (Mic/Ação na Direita)
+ * Ajuste: Ergonomia para Polegar Direito (Mic/A§£o na Direita)
  */
 
 "use client";
@@ -37,7 +37,7 @@ export default function ActionDrawer({ isOpen, onClose }: ActionDrawerProps) {
 
     try {
       const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError || !user) throw new Error("Utilizador não autenticado.");
+      if (userError || !user) throw new Error("Utilizador n£o autenticado.");
 
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}.${fileExt}`;
@@ -113,25 +113,25 @@ export default function ActionDrawer({ isOpen, onClose }: ActionDrawerProps) {
             <div style={styles.content}>
               {!file ? (
                 <div style={styles.uploadGrid}>
-                  {/* FOTO À ESQUERDA */}
+                  {/* FOTO € ESQUERDA */}
                   <label style={styles.uploadBtn}>
                     <Image size={28} color="rgba(255,255,255,0.4)" />
                     <span style={styles.btnText}>FOTO</span>
                     <input type="file" accept="image/*" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
                   </label>
 
-                  {/* VÍDEO NO MEIO */}
+                  {/* VDEO NO MEIO */}
                   <label style={styles.uploadBtn}>
                     <Film size={28} color="rgba(255,255,255,0.4)" />
-                    <span style={styles.btnText}>VÍDEO</span>
+                    <span style={styles.btnText}>VDEO</span>
                     <input type="file" accept="video/*" hidden onChange={(e) => setFile(e.target.files?.[0] || null)} />
                   </label>
 
-                  {/* VOZ À DIREITA (AÇÃO PRINCIPAL / FÁCIL ALCANCE) */}
+                  {/* VOZ € DIREITA (A‡ƒO PRINCIPAL / FCIL ALCANCE) */}
                   <label style={{...styles.uploadBtn, borderColor: "#00f2fe", background: "rgba(0, 242, 254, 0.05)"}}>
                     <Mic size={32} color="#00f2fe" />
                     <span style={{...styles.btnText, color: "#00f2fe"}}>VOZ</span>
-                    {/* Aqui entrará sua lógica de gravação direta se desejar */}
+                    {/* Aqui entrar¡ sua l³gica de grava§£o direta se desejar */}
                   </label>
                 </div>
               ) : (
@@ -150,14 +150,14 @@ export default function ActionDrawer({ isOpen, onClose }: ActionDrawerProps) {
                   </div>
 
                   <textarea
-                    placeholder="Dê voz ao seu pensamento..."
+                    placeholder="Dª voz ao seu pensamento..."
                     value={caption}
                     onChange={(e) => setCaption(e.target.value)}
                     disabled={isUploading}
                     style={styles.captionInput}
                   />
 
-                  {/* BOTÃO DE LANÇAR - MANTIDO NO CENTRO MAS COM DESTAQUE NA DIREITA */}
+                  {/* BOTƒO DE LAN‡AR - MANTIDO NO CENTRO MAS COM DESTAQUE NA DIREITA */}
                   <motion.button 
                     onClick={handlePublish}
                     disabled={isUploading}
@@ -172,7 +172,7 @@ export default function ActionDrawer({ isOpen, onClose }: ActionDrawerProps) {
                     ) : (
                       <Send size={18} />
                     )}
-                    {isUploading ? "LANÇANDO..." : "LANÇAR NO FEED"}
+                    {isUploading ? "LAN‡ANDO..." : "LAN‡AR NO FEED"}
                   </motion.button>
                 </div>
               )}

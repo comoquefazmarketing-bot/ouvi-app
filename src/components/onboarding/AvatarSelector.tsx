@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React from "react";
 import { motion } from "framer-motion";
 
@@ -13,8 +13,8 @@ export default function AvatarSelector({ avatarUrl, onNext }: { avatarUrl: strin
         <img src={avatarUrl || "/default-avatar.png"} alt="Sua Foto" style={styles.avatarImg} />
         <div style={styles.glow} />
       </motion.div>
-      <h2 style={styles.title}>ESSA É A SUA IDENTIDADE?</h2>
-      <button onClick={onNext} style={styles.nextBtn}>CONFIRMAR FREQUÊNCIA</button>
+      <h2 style={styles.title}>ESSA ‰ A SUA IDENTIDADE?</h2>
+      <button onClick={onNext} style={styles.nextBtn}>CONFIRMAR FREQUŠNCIA</button>
     </div>
   );
 }

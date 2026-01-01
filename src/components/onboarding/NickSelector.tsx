@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import React, { useState } from "react";
 
 export default function NickSelector({ initialNick, onFinish }: { initialNick: string; onFinish: (nick: string) => void }) {

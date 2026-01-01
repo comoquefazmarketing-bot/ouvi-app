@@ -1,5 +1,5 @@
-/**
- * PROJETO OUVI — Middleware de Teste (Acesso Liberado)
+﻿/**
+ * PROJETO OUVI €” Middleware de Teste (Acesso Liberado)
  * Autor: Felipe Makarios
  */
 
@@ -40,7 +40,7 @@ export async function middleware(request: NextRequest) {
   )
 
   // --- MODO DE TESTE LIBERADO ---
-  // Comentei as travas para você navegar livremente entre as telas.
+  // Comentei as travas para vocª navegar livremente entre as telas.
   
   /* const { data: { user } } = await supabase.auth.getUser()
   if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
@@ -52,6 +52,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Mantemos o matcher vazio ou apenas com rotas que não vamos testar agora
+  // Mantemos o matcher vazio ou apenas com rotas que n£o vamos testar agora
   matcher: ['/coloque_aqui_algo_que_nao_existe'],
 }
