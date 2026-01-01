@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [myInvites, setMyInvites] = useState<any[]>([]);
+  const [showTelegramBanner, setShowTelegramBanner] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -21,28 +22,27 @@ export default function DashboardPage() {
       setCurrentUser(user);
 
       if (user) {
-        // 2. BUSCA PERFIL PARA NOTIFICAÇÃO ÚNICA (USANDO NICK)
+        // Verifica se já entrou no grupo para exibir ou não o banner
+        const hasJoined = localStorage.getItem('ouvi_joined_telegram');
+        if (!hasJoined) setShowTelegramBanner(true);
+
+        // 2. BUSCA PERFIL PARA NOTIFICAÇÃO ÚNICA
         const { data: profileData } = await supabase
           .from('profiles')
           .select('username, welcome_sent')
           .eq('id', user.id)
           .single();
 
-        // Só dispara o Telegram se o Nick existir e se for o PRIMEIRO ACESSO (welcome_sent: false)
         if (profileData && !profileData.welcome_sent) {
           const nick = profileData.username || "Novo Membro";
-          
-          // Disparo único com o Nick para o Telegram
           await notifyArrival(nick);
-
-          // Trava a porta: marca no banco que o aviso de entrada já foi dado para evitar repetição
           await supabase
             .from('profiles')
             .update({ welcome_sent: true })
             .eq('id', user.id);
         }
 
-        // 3. Busca os convites disponíveis no "Cofre" deste usuário
+        // 3. Busca convites
         const { data: invitesData } = await supabase
           .from('invites')
           .select('code, status')
@@ -52,7 +52,7 @@ export default function DashboardPage() {
         if (invitesData) setMyInvites(invitesData);
       }
 
-      // 4. Busca os posts (Feed Cronológico)
+      // 4. Busca os posts
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*')
@@ -60,17 +60,14 @@ export default function DashboardPage() {
 
       if (postsError) throw postsError;
 
-      // 5. Busca todos os perfis para o mapeamento visual
       const { data: allProfiles } = await supabase
         .from('profiles')
         .select('id, username, avatar_url');
 
-      // 6. Busca os comentários de áudio
       const { data: commentsData } = await supabase
         .from('audio_comments')
         .select('*');
 
-      // 7. MONTAGEM SENSORIAL DO FEED (Merge de dados)
       const merged = (postsData || []).map(post => {
         const userProfile = allProfiles?.find(p => p.id === post.user_id) || null;
         const postComments = (commentsData || [])
@@ -98,10 +95,36 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const handleJoinTelegram = () => {
+    localStorage.setItem('ouvi_joined_telegram', 'true');
+    setShowTelegramBanner(false);
+    // Substitua pelo seu link real do Telegram
+    window.open('https://t.me/SEU_LINK_AQUI', '_blank');
+  };
+
   return (
     <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px' }}>
+      <style jsx global>{`
+        @keyframes pulse-social {
+          0% { transform: scale(1); opacity: 0.9; }
+          50% { transform: scale(1.02); opacity: 1; }
+          100% { transform: scale(1); opacity: 0.9; }
+        }
+      `}</style>
+
       <div style={{ maxWidth: '500px', margin: '0 auto', padding: '10px' }}>
         
+        {/* BARRA SUPERIOR / BANNER DE CONVOCAÇÃO */}
+        <div style={styles.header}>
+          <h1 style={styles.brand}>OUVI</h1>
+          {showTelegramBanner && (
+            <button onClick={handleJoinTelegram} style={styles.socialButton}>
+              <span style={styles.socialText}>ENTRAR NO CÍRCULO</span>
+              <span>🎙️</span>
+            </button>
+          )}
+        </div>
+
         {/* SEÇÃO DE CONVITES (FOMO & EXCLUSIVIDADE) */}
         {myInvites.length > 0 && (
           <div style={styles.inviteContainer}>
@@ -111,7 +134,7 @@ export default function DashboardPage() {
                 <span key={inv.code} style={styles.inviteCode}>{inv.code}</span>
               ))}
             </div>
-            <p style={styles.inviteFooter}>Compartilhe o sinal. A frequência é limitada.</p>
+            <p style={styles.inviteFooter}>COMPARTILHE O ACESSO. A REDE ESTÁ VIRALIZANDO.</p>
           </div>
         )}
         
@@ -119,7 +142,6 @@ export default function DashboardPage() {
         
         {!loading && posts.length === 0 && <p style={styles.emptyText}>SILÊNCIO ABSOLUTO.</p>}
 
-        {/* LISTAGEM DE POSTS (FEED) */}
         {posts.map((post) => (
           <PostCard 
             key={post.id} 
@@ -131,7 +153,6 @@ export default function DashboardPage() {
         ))}
       </div>
       
-      {/* DRAWER DE COMENTÁRIOS / THREADS */}
       {selectedPost && (
         <ThreadDrawer 
           post={selectedPost} 
@@ -144,18 +165,26 @@ export default function DashboardPage() {
 }
 
 const styles = {
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', padding: '10px 0' },
+  brand: { color: '#fff', fontSize: '24px', fontWeight: '900' as const, letterSpacing: '5px', margin: 0 },
+  socialButton: {
+    background: 'linear-gradient(45deg, #00f2fe, #4facfe)',
+    border: 'none',
+    borderRadius: '20px',
+    padding: '8px 16px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    animation: 'pulse-social 2s infinite ease-in-out',
+    boxShadow: '0 0 15px rgba(0, 242, 254, 0.3)'
+  },
+  socialText: { color: '#000', fontSize: '9px', fontWeight: '900' as const, letterSpacing: '1px' },
   loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' },
   emptyText: { color: '#333', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px' },
-  inviteContainer: { 
-    backgroundColor: '#111', 
-    border: '1px solid #00f2fe', 
-    padding: '15px', 
-    borderRadius: '8px', 
-    marginBottom: '20px', 
-    textAlign: 'center' as const 
-  },
-  inviteTitle: { color: '#00f2fe', fontSize: '10px', fontWeight: '900' as const, marginBottom: '10px' },
+  inviteContainer: { backgroundColor: '#111', border: '1px solid #00f2fe', padding: '20px', borderRadius: '16px', marginBottom: '25px', textAlign: 'center' as const },
+  inviteTitle: { color: '#00f2fe', fontSize: '10px', fontWeight: '900' as const, marginBottom: '12px', letterSpacing: '2px' },
   inviteList: { display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' as const },
-  inviteCode: { backgroundColor: '#00f2fe', color: '#000', padding: '4px 8px', fontSize: '12px', fontWeight: 'bold' as const, borderRadius: '4px' },
-  inviteFooter: { color: '#444', fontSize: '9px', marginTop: '10px', textTransform: 'uppercase' as const }
+  inviteCode: { backgroundColor: '#00f2fe', color: '#000', padding: '6px 12px', fontSize: '13px', fontWeight: 'bold' as const, borderRadius: '8px' },
+  inviteFooter: { color: '#444', fontSize: '8px', marginTop: '12px', fontWeight: '700' as const, letterSpacing: '1px' }
 };
