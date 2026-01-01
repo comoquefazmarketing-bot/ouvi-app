@@ -1,6 +1,5 @@
 ﻿"use client";
-import React, { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import React, { useMemo } from "react";
 import ReactionBar from "@/components/dashboard/Threads/ReactionBar";
 import { motion } from "framer-motion";
 
@@ -32,27 +31,26 @@ export default function PostCard({ post, onOpenThread, onDelete, onRefresh }: an
       </div>
 
       <div style={cardStyles.footer}>
+        {/* LADO ESQUERDO: Reações (Zap, Mic, Love) dentro da pílula */}
         <div style={cardStyles.reactionSide}>
-          <ReactionBar postId={post.id} initialReactions={post.reactions} onReply={() => onOpenThread(post)} onRefresh={onRefresh} />
-          
-          {/* PORTAL BALÃO COM SONAR */}
-          <motion.div 
-            whileHover={{ scale: 1.3 }}
-            onClick={() => onOpenThread(post)} 
-            style={cardStyles.chatIconWrapper}
-          >
-            <motion.div animate={{ scale: [1, 1.5, 1], opacity: [0.3, 0, 0.3] }} transition={{ repeat: Infinity, duration: 2 }} style={cardStyles.sonar} />
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#00f2fe" strokeWidth="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-          </motion.div>
+          <ReactionBar 
+            postId={post.id} 
+            initialReactions={post.reactions} 
+            onReply={() => onOpenThread(post)} 
+            onRefresh={onRefresh} 
+          />
         </div>
         
+        {/* LADO DIREITO: O BOTÃO SAGRADO (O que eles estão falando) */}
         <motion.button 
           onClick={() => onOpenThread(post)} 
           style={{
             ...cardStyles.coreBtn,
             color: intensity > 0.5 ? "#FFD700" : "#00f2fe",
-            borderColor: intensity > 0.5 ? "#FFD700" : "rgba(0, 242, 254, 0.3)"
+            borderColor: intensity > 0.5 ? "#FFD700" : "rgba(0, 242, 254, 0.4)"
           }}
+          whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 242, 254, 0.05)" }}
+          whileTap={{ scale: 0.95 }}
           animate={{ opacity: [0.8, 1, 0.8] }}
           transition={{ repeat: Infinity, duration: 1.5 }}
         >
@@ -73,9 +71,23 @@ const cardStyles = {
   postImage: { width: "100%", opacity: 0.8 },
   bodyTextContainer: { padding: "15px 20px" },
   text: { color: "#fff", fontSize: "15px", fontWeight: "300" as const },
-  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", borderTop: "1px solid #111" },
-  reactionSide: { display: "flex", alignItems: "center", gap: "15px" },
-  chatIconWrapper: { position: "relative" as const, cursor: "pointer", display: "flex", alignItems: "center" },
-  sonar: { position: "absolute" as const, inset: -5, border: "1px solid #00f2fe", borderRadius: "50%" },
-  coreBtn: { background: "none", border: "1px solid", fontSize: "9px", fontWeight: "900" as const, padding: "10px 18px", borderRadius: "20px", cursor: "pointer" }
+  footer: { 
+    display: "flex", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    padding: "15px 20px", 
+    borderTop: "1px solid #111" 
+  },
+  reactionSide: { display: "flex", alignItems: "center" },
+  coreBtn: { 
+    background: "rgba(0,0,0,0.3)", 
+    border: "1px solid", 
+    fontSize: "9px", 
+    fontWeight: "900" as const, 
+    padding: "10px 18px", 
+    borderRadius: "20px", 
+    cursor: "pointer",
+    letterSpacing: "1px",
+    textTransform: "uppercase" as const
+  }
 };
