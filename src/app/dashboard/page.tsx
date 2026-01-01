@@ -1,7 +1,6 @@
 ﻿/**
  * PROJETO OUVI – Dashboard / Feed Principal
- * Versão 2026 Blindada
- * Ajuste: Query Resiliente para evitar que o Feed suma
+ * Versão 2026 Sintonizada - CORREÇÃO DE CABEÇALHO
  */
 
 "use client";
@@ -20,17 +19,15 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // 1. Identifica o usuário logado
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 2. BUSCA RESILIENTE: Tentamos buscar tudo, mas sem travar se faltar algo
-      // Removi o filtro interno rígido para garantir que posts apareçam
+      // BUSCA PRECISA: Note o uso do profiles!
       const { data, error } = await supabase
         .from('posts')
         .select(`
           *,
-          profiles (
+          profiles:user_id (
             id, 
             username, 
             avatar_url
@@ -40,7 +37,7 @@ export default function DashboardPage() {
             content,
             username,
             created_at,
-            profiles (
+            profiles:user_id (
               username,
               avatar_url
             )
@@ -48,30 +45,30 @@ export default function DashboardPage() {
         `)
         .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error("Erro na query relacional:", error.message);
-        // Se a query complexa der erro (por causa das relações), buscamos o básico
-        const { data: basicData } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
-        setPosts(basicData || []);
-        return;
-      }
+      if (error) throw error;
 
-      // 3. Formatação segura dos dados
       if (data) {
-        const formattedPosts = data.map(post => ({
-          ...post,
-          // Garante que o PostCard não quebre se o perfil for nulo
-          profiles: post.profiles || { username: 'membro', avatar_url: '/default-avatar.png' },
-          // Ordena as prévias de comentários (mais recentes primeiro)
-          audio_comments: post.audio_comments?.sort((a: any, b: any) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          ) || []
-        }));
+        const formattedPosts = data.map(post => {
+          // Ajuste fino para garantir que profiles seja um objeto único e não uma lista
+          const profileData = Array.isArray(post.profiles) ? post.profiles[0] : post.profiles;
+          
+          return {
+            ...post,
+            // Forçamos a estrutura que o PostCard espera
+            profiles: profileData || { username: 'membro', avatar_url: '/default-avatar.png' },
+            audio_comments: post.audio_comments?.sort((a: any, b: any) => 
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            ) || []
+          };
+        });
         setPosts(formattedPosts);
       }
 
     } catch (err: any) {
-      console.error("Erro ao sintonizar o feed:", err.message);
+      console.error("Erro na sintonização:", err.message);
+      // Fallback para não ficar sem nada na tela
+      const { data: fallback } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+      setPosts(fallback || []);
     } finally {
       setLoading(false);
     }
@@ -82,18 +79,12 @@ export default function DashboardPage() {
   }, [fetchData]);
 
   return (
-    <div style={{ 
-      backgroundColor: '#000', 
-      minHeight: '100vh', 
-      paddingBottom: '140px', 
-      position: 'relative',
-      overflowX: 'hidden'
-    }}>
+    <div style={{ backgroundColor: '#000', minHeight: '100vh', paddingBottom: '140px' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto', padding: '10px' }}>
         
         {loading && (
           <div style={styles.statusContainer}>
-             <p style={styles.loadingText}>SINTONIZANDO VOZES...</p>
+             <p style={styles.loadingText}>SINTONIZANDO...</p>
           </div>
         )}
         
@@ -109,9 +100,7 @@ export default function DashboardPage() {
             post={post} 
             onOpenThread={() => setSelectedPost(post)}
             currentUserId={currentUser?.id} 
-            onDelete={(deletedId: string) => {
-               setPosts(prev => prev.filter(p => p.id !== deletedId));
-            }}
+            onDelete={(id: string) => setPosts(prev => prev.filter(p => p.id !== id))}
           />
         ))}
       </div>
