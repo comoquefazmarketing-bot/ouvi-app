@@ -26,11 +26,14 @@ export default function DashboardPage() {
   const handleEnviarConvite = async () => {
     if (myInvites.length === 0) return;
 
+    // Pega o primeiro código disponível
     const codigoParaUsar = myInvites[0].code;
-    const emailAmigo = window.prompt(`Você tem ${myInvites.length} chaves. Enviar sinal para qual e-mail?`);
+    
+    // Abre o prompt para o usuário digitar o e-mail
+    const emailAmigo = window.prompt(`SINTONIZAR NOVO MEMBRO\nVocê possui ${myInvites.length} chaves.\n\nDigite o e-mail para enviar o sinal:`);
     
     if (!emailAmigo || !emailAmigo.includes('@')) {
-      if (emailAmigo) alert("E-mail inválido.");
+      if (emailAmigo) alert("Frequência inválida. O e-mail precisa ser real.");
       return;
     }
 
@@ -40,7 +43,7 @@ export default function DashboardPage() {
         body: { 
           to: emailAmigo,
           subject: "🎙️ Seu sinal de acesso ao OUVI",
-          html: `<strong>${currentUser?.username || 'Um amigo'}</strong> te enviou uma chave de acesso exclusiva: <h1>${codigoParaUsar}</h1><br>Acesse agora: https://ouvi-app.vercel.app`
+          html: `<strong>${currentUser?.username || 'Um amigo'}</strong> te enviou uma chave de acesso exclusiva ao OUVI: <br><br><h1>${codigoParaUsar}</h1><br>Sintonize agora: https://ouvi-app.vercel.app`
         }
       });
 
@@ -49,12 +52,14 @@ export default function DashboardPage() {
       // Atualiza o status no banco de dados para evitar reuso
       await supabase.from('invites').update({ status: 'enviado' }).eq('code', codigoParaUsar);
       
-      alert("Sinal enviado com sucesso.");
+      alert("Sinal transmitido com sucesso.");
+      
+      // Remove o convite usado da lista local
       setMyInvites(prev => prev.filter(inv => inv.code !== codigoParaUsar));
       
     } catch (err) {
       console.error("Erro ao enviar convite:", err);
-      alert("Erro na sintonização do e-mail.");
+      alert("Erro na sintonização do sinal.");
     }
   };
 
@@ -79,7 +84,7 @@ export default function DashboardPage() {
           await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
         
-        // Regra do PWA: Se não for nativo e nunca viu o tutorial, mostra o InstallStories
+        // Regra do PWA
         const isPWA = window.matchMedia('(display-mode: standalone)').matches;
         const hasSeen = localStorage.getItem('ouvi_tutorial_seen');
         if (!isPWA && !hasSeen) {
@@ -87,7 +92,7 @@ export default function DashboardPage() {
         }
       }
 
-      // 2. Busca de Convites (Aparecerão as 10 chaves da Livia aqui)
+      // 2. Busca de Convites Ativos
       const { data: invites } = await supabase
         .from('invites')
         .select('code')
@@ -153,18 +158,21 @@ export default function DashboardPage() {
           {/* LADO A: FEED */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 px-4 scrollbar-hide">
             
+            {/* Botão de Convites Minimalista e Funcional */}
             {myInvites.length > 0 && (
-              <div className="mt-8 mb-4 flex justify-center">
+              <div className="mt-8 mb-4 flex justify-center px-6">
                 <motion.button 
                   onClick={handleEnviarConvite}
                   animate={{ 
-                    scale: [1, 1.05, 1],
-                    boxShadow: ["0 0 0px rgba(255,255,255,0)", "0 0 15px rgba(255,255,255,0.15)", "0 0 0px rgba(255,255,255,0)"]
+                    boxShadow: ["0 0 0px rgba(0,255,255,0)", "0 0 20px rgba(0,255,255,0.1)", "0 0 0px rgba(0,255,255,0)"]
                   }}
-                  transition={{ duration: 3, repeat: Infinity, repeatDelay: 8, ease: "easeInOut" }}
-                  className="bg-white text-black px-10 py-3 rounded-full text-[11px] font-black tracking-[2px] shadow-2xl active:scale-95 transition-all"
+                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+                  className="w-full max-w-xs bg-zinc-900/50 border border-cyan-500/20 text-cyan-400 py-4 rounded-2xl flex flex-col items-center gap-1 active:scale-95 transition-all"
                 >
-                  {myInvites.length} {myInvites.length === 1 ? 'CONVITE DISPONÍVEL' : 'CONVITES DISPONÍVEIS'}
+                  <span className="text-[9px] font-black tracking-[3px] opacity-60 uppercase">Sinais Disponíveis</span>
+                  <span className="text-white text-xs font-bold tracking-widest">
+                    VOCÊ TEM {myInvites.length} {myInvites.length === 1 ? 'CHAVE' : 'CHAVES'}
+                  </span>
                 </motion.button>
               </div>
             )}
