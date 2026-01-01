@@ -1,11 +1,11 @@
 ﻿/**
  * PROJETO OUVI – Dashboard / Feed Principal
- * Versão 2026 Sintonizada
- * Ajuste: Query Relacional para Prévias e Comentários
+ * Versão 2026 Blindada
+ * Ajuste: Query Resiliente para evitar que o Feed suma
  */
 
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
@@ -16,7 +16,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -24,15 +24,14 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 2. BUSCA ELITE: Post + Perfil + Comentários (Tudo em uma tacada só)
-      // O audio_comments(profiles(...)) garante que a prévia tenha nome e foto
+      // 2. BUSCA RESILIENTE: Tentamos buscar tudo, mas sem travar se faltar algo
+      // Removi o filtro interno rígido para garantir que posts apareçam
       const { data, error } = await supabase
         .from('posts')
         .select(`
           *,
           profiles (
             id, 
-            full_name, 
             username, 
             avatar_url
           ),
@@ -41,7 +40,6 @@ export default function DashboardPage() {
             content,
             username,
             created_at,
-            audio_url,
             profiles (
               username,
               avatar_url
@@ -50,35 +48,44 @@ export default function DashboardPage() {
         `)
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro na query relacional:", error.message);
+        // Se a query complexa der erro (por causa das relações), buscamos o básico
+        const { data: basicData } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
+        setPosts(basicData || []);
+        return;
+      }
 
-      // 3. Organiza os dados (O audio_comments vem como array, pegamos os mais recentes primeiro)
-      const formattedPosts = (data || []).map(post => ({
-        ...post,
-        // Garantimos que o PostCard encontre a lista de comentários para a prévia
-        audio_comments: post.audio_comments?.sort((a: any, b: any) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        ) || []
-      }));
-
-      setPosts(formattedPosts);
+      // 3. Formatação segura dos dados
+      if (data) {
+        const formattedPosts = data.map(post => ({
+          ...post,
+          // Garante que o PostCard não quebre se o perfil for nulo
+          profiles: post.profiles || { username: 'membro', avatar_url: '/default-avatar.png' },
+          // Ordena as prévias de comentários (mais recentes primeiro)
+          audio_comments: post.audio_comments?.sort((a: any, b: any) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          ) || []
+        }));
+        setPosts(formattedPosts);
+      }
 
     } catch (err: any) {
       console.error("Erro ao sintonizar o feed:", err.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => { 
     fetchData(); 
-  }, []);
+  }, [fetchData]);
 
   return (
     <div style={{ 
       backgroundColor: '#000', 
       minHeight: '100vh', 
-      paddingBottom: '120px', // Ajustado para não vazar
+      paddingBottom: '140px', 
       position: 'relative',
       overflowX: 'hidden'
     }}>
@@ -100,8 +107,11 @@ export default function DashboardPage() {
           <PostCard 
             key={post.id} 
             post={post} 
-            onOpenThread={setSelectedPost}
+            onOpenThread={() => setSelectedPost(post)}
             currentUserId={currentUser?.id} 
+            onDelete={(deletedId: string) => {
+               setPosts(prev => prev.filter(p => p.id !== deletedId));
+            }}
           />
         ))}
       </div>
