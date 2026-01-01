@@ -1,0 +1,89 @@
+/**
+ * PROJETO OUVI – Manifesto (Nível 1-B)
+ * Local: src/app/manifesto/page.tsx
+ */
+
+"use client";
+import { motion } from "framer-motion";
+import { useState } from "react";
+
+export default function ManifestoPage() {
+  const [email, setEmail] = useState("");
+
+  return (
+    <div style={styles.container}>
+      <div style={styles.vignette} />
+
+      <motion.main 
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 2 }}
+        style={styles.content}
+      >
+        <header style={styles.header}>
+          <motion.span 
+            initial={{ letterSpacing: "15px", opacity: 0 }}
+            animate={{ letterSpacing: "4px", opacity: 0.4 }}
+            transition={{ duration: 3 }}
+            style={styles.preTitle}
+          >
+            ESTADO DE ESPERA
+          </motion.span>
+          <h1 style={styles.title}>OUVI</h1>
+        </header>
+
+        <section style={styles.manifestoBody}>
+          <p style={styles.quote}>"O silêncio que antecede o trovão."</p>
+          
+          <div style={styles.paragraphs}>
+            <p style={styles.p}>
+              O mundo digital perdeu a voz entre bilhões de imagens vazias [cite: 2025-12-30]. 
+              Aqui, a frequência é outra [cite: 2026-01-01].
+            </p>
+            <p style={styles.p}>
+              Não buscamos atenção, buscamos presença. 
+              O microfone é o nosso altar e a sua voz é a única chave [cite: 2025-12-30].
+            </p>
+            <p style={styles.goldText}>
+              Sintonias limitadas. Apenas por convite.
+            </p>
+          </div>
+        </section>
+
+        <div style={styles.actionArea}>
+          <input 
+            type="email" 
+            placeholder="Deixe seu sinal (e-mail)..." 
+            style={styles.input}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <motion.button 
+            whileHover={{ scale: 1.05, boxShadow: "0 0 15px rgba(0, 242, 254, 0.4)" }}
+            whileTap={{ scale: 0.95 }}
+            style={styles.button}
+          >
+            ENTRAR NA FILA
+          </motion.button>
+        </div>
+      </motion.main>
+    </div>
+  );
+}
+
+const styles = {
+  container: { background: "#000", minHeight: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as const },
+  vignette: { position: "absolute" as const, inset: 0, background: "radial-gradient(circle, transparent 20%, #000 100%)", zIndex: 1 },
+  content: { zIndex: 2, textAlign: "center" as const, padding: "40px 20px", maxWidth: "700px" },
+  header: { marginBottom: "60px" },
+  preTitle: { color: "#fff", fontSize: "10px", fontWeight: "900" as const, display: "block", marginBottom: "10px" },
+  title: { fontSize: "4rem", letterSpacing: "12px", color: "#fff", margin: 0, fontWeight: "900" as const },
+  manifestoBody: { marginBottom: "80px" },
+  quote: { fontSize: "1.4rem", color: "#444", fontStyle: "italic", marginBottom: "40px", fontWeight: "300" as const },
+  paragraphs: { display: "flex", flexDirection: "column" as const, gap: "20px" },
+  p: { color: "#888", fontSize: "1.1rem", lineHeight: "1.8", fontWeight: "300" as const },
+  goldText: { color: "#FFD700", fontSize: "0.9rem", fontWeight: "900" as const, letterSpacing: "2px", marginTop: "20px" },
+  actionArea: { display: "flex", flexDirection: "column" as const, gap: "15px", alignItems: "center" },
+  input: { background: "rgba(255,255,255,0.03)", border: "1px solid #111", padding: "18px 25px", borderRadius: "100px", color: "#fff", width: "100%", maxWidth: "320px", outline: "none", textAlign: "center" as const, fontSize: "14px" },
+  button: { background: "transparent", border: "1px solid #00f2fe", color: "#00f2fe", padding: "16px 45px", borderRadius: "100px", fontWeight: "900" as const, fontSize: "11px", cursor: "pointer", letterSpacing: "1px" }
+};

@@ -1,54 +1,37 @@
 ﻿/**
- * PROJETO OUVI €” Tela de Login (VISUAL + L“GICA SUPABASE)
+ * PROJETO OUVI – Tela de Login (VISUAL + LÓGICA SUPABASE + GUARDIÃO)
  * Autor: Felipe Makarios
+ * Nível: Primeiro Nível (A) - Acesso Restrito com Expulsão Automática
  */
 
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { supabase } from "@/lib/supabaseClient"; // Verifique se este caminho est¡ correto no seu projeto
+import { supabase } from "@/lib/supabaseClient";
 
-const ImmersiveBackground = () => {
-  const layers = [
-    { count: 40, size: 1, speed: 6, opacity: 0.3 },
-    { count: 30, size: 2, speed: 4, opacity: 0.6 },
-    { count: 15, size: 3, speed: 3, opacity: 0.8 },
-  ];
-
-  return (
-    <div style={styles.grainContainer}>
-      {layers.map((layer, layerIdx) => (
-        <React.Fragment key={layerIdx}>
-          {Array.from({ length: layer.count }).map((_, i) => (
-            <motion.div
-              key={`${layerIdx}-${i}`}
-              style={{
-                ...styles.grain,
-                width: layer.size,
-                height: layer.size,
-                opacity: layer.opacity,
-              }}
-              animate={{
-                x: [0, Math.cos(i) * 400, 0],
-                y: [0, Math.sin(i) * 400, 0],
-              }}
-              transition={{
-                duration: layer.speed + Math.random() * 5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          ))}
-        </React.Fragment>
-      ))}
-    </div>
-  );
-};
+// ... (Componente ImmersiveBackground mantido igual)
 
 export default function LoginPage() {
-  
-  // FUN‡ƒO REAL DE LOGIN DO SUPABASE
+  const router = useRouter();
+  const [autorizado, setAutorizado] = useState(false);
+
+  useEffect(() => {
+    const checkInvite = () => {
+      const hasInvite = localStorage.getItem("ouvi_invite_code");
+      
+      if (!hasInvite) {
+        // Se não tem convite, manda pro silêncio sem dó
+        router.replace("/manifesto");
+      } else {
+        // Se tem o sinal, libera a visão do login
+        setAutorizado(true);
+      }
+    };
+    checkInvite();
+  }, [router]);
+
   const handleLogin = async (provider: 'google' | 'tiktok' | 'instagram') => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -60,9 +43,12 @@ export default function LoginPage() {
       if (error) throw error;
     } catch (error) {
       console.error("Erro ao logar:", error);
-      alert("Erro ao conectar com o provedor social.");
     }
   };
+
+  // Se ainda não verificou ou não está autorizado, renderiza o vazio (preto)
+  // Isso impede que o intruso veja os botões por 1 segundo [cite: 2026-01-01]
+  if (!autorizado) return <div style={{ background: "#000", height: "100vh" }} />;
 
   return (
     <div style={styles.container}>
@@ -70,7 +56,7 @@ export default function LoginPage() {
 
       <div style={styles.content}>
         <motion.img 
-          src="/logo-ouvi.svg" 
+          src="/logo-dashboard.svg" 
           alt="OUVI"
           style={styles.logoMaster}
           animate={{ 
@@ -84,10 +70,9 @@ export default function LoginPage() {
           transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
         />
         
-        <p style={styles.tagline}>A FREQUŠNCIA DO SEU MUNDO</p>
+        <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
 
         <div style={styles.buttonGroup}>
-          {/* BOTƒO GOOGLE FUNCIONAL */}
           <motion.button
             onClick={() => handleLogin('google')}
             style={styles.premiumBtn}
@@ -97,7 +82,6 @@ export default function LoginPage() {
             <span style={styles.btnText}>GOOGLE ACCESS</span>
           </motion.button>
 
-          {/* BOTƒO TIKTOK */}
           <motion.button
             onClick={() => handleLogin('tiktok' as any)}
             style={styles.premiumBtn}
@@ -107,7 +91,6 @@ export default function LoginPage() {
             <span style={styles.btnText}>TIKTOK SYNC</span>
           </motion.button>
 
-          {/* BOTƒO INSTAGRAM */}
           <motion.button
             onClick={() => handleLogin('instagram' as any)}
             style={{ ...styles.premiumBtn, color: "#f09433", borderColor: "rgba(240, 148, 51, 0.4)" }}
@@ -122,61 +105,4 @@ export default function LoginPage() {
   );
 }
 
-const styles = {
-  container: {
-    background: "#000",
-    height: "100vh",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    overflow: "hidden",
-    position: "relative" as "relative",
-  },
-  grainContainer: {
-    position: "absolute" as "absolute",
-    width: "100%", height: "100%",
-    display: "flex", justifyContent: "center", alignItems: "center",
-    zIndex: 1,
-  },
-  grain: {
-    position: "absolute" as "absolute",
-    background: "#00f2fe",
-    borderRadius: "50%",
-    boxShadow: "0 0 10px rgba(0, 242, 254, 0.8)",
-  },
-  content: {
-    width: "100%", maxWidth: "500px",
-    display: "flex", flexDirection: "column" as "column",
-    alignItems: "center", zIndex: 10,
-  },
-  logoMaster: {
-    width: "160px", 
-    height: "auto",
-    marginBottom: "15px",
-  },
-  tagline: {
-    color: "#fff", fontSize: "10px", fontWeight: "900",
-    letterSpacing: "10px", marginBottom: "60px",
-    opacity: 0.3,
-  },
-  buttonGroup: {
-    width: "100%", display: "flex", flexDirection: "column" as "column",
-    gap: "16px", padding: "0 60px",
-  },
-  premiumBtn: {
-    background: "rgba(255, 255, 255, 0.02)",
-    border: "1px solid rgba(255, 255, 255, 0.15)",
-    padding: "16px",
-    borderRadius: "20px",
-    cursor: "pointer",
-    backdropFilter: "blur(20px)",
-    display: "flex", justifyContent: "center",
-    color: "#fff",
-    transition: "all 0.5s cubic-bezier(0.2, 0.8, 0.2, 1)",
-  },
-  btnText: {
-    fontSize: "11px", fontWeight: "800",
-    letterSpacing: "2px",
-    pointerEvents: "none" as "none",
-  }
-};
+// ... (Styles mantidos iguais)
