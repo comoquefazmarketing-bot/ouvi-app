@@ -17,8 +17,9 @@ export default function DashboardPage() {
   const [myInvites, setMyInvites] = useState<any[]>([]);
   const [showTelegramBanner, setShowTelegramBanner] = useState(false);
 
-  // O Link da sua Sintonia Direta
+  // Canais de Sintonia
   const TELEGRAM_LINK = "https://t.me/+vMOnG-2fI_E4ZTRh";
+  const SUPPORT_BOT_LINK = "https://t.me/ouvi_maestro_bot";
 
   const fetchData = useCallback(async () => {
     try {
@@ -27,7 +28,6 @@ export default function DashboardPage() {
       setCurrentUser(user);
 
       if (user) {
-        // Verifica se o sintonizador já acessou o QG
         const hasJoined = localStorage.getItem('ouvi_joined_telegram');
         if (!hasJoined) setShowTelegramBanner(true);
 
@@ -37,14 +37,12 @@ export default function DashboardPage() {
           .eq('id', user.id)
           .single();
 
-        // Notifica o mestre no Telegram sobre a nova sintonização
         if (profileData && !profileData.welcome_sent) {
           const nick = profileData.username || "Novo Membro";
           await notifyArrival(nick);
           await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
 
-        // Busca convites disponíveis para manter a escassez
         const { data: invitesData } = await supabase
           .from('invites')
           .select('code, status')
@@ -54,7 +52,6 @@ export default function DashboardPage() {
         if (invitesData) setMyInvites(invitesData);
       }
 
-      // Busca o Feed (Silêncio ou Som)
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*')
@@ -133,7 +130,6 @@ export default function DashboardPage() {
         <header style={styles.header}>
           <h1 style={styles.brand}>OUVI</h1>
           
-          {/* Botão QG Telegram Pulsante */}
           {showTelegramBanner && (
             <motion.button 
               onClick={handleJoinTelegram} 
@@ -147,7 +143,6 @@ export default function DashboardPage() {
           )}
         </header>
 
-        {/* Módulo de Convites Exclusivos */}
         {myInvites.length > 0 && (
           <div style={styles.inviteContainer}>
             <p style={styles.inviteTitle}>🎫 {myInvites.length} ACESSOS EXCLUSIVOS DISPONÍVEIS</p>
@@ -156,9 +151,7 @@ export default function DashboardPage() {
                 <span key={inv.code} style={styles.inviteCode}>{inv.code}</span>
               ))}
             </div>
-            <p style={styles.inviteFooter}>
-              USE COM SABEDORIA. O SINAL É ESCASSO.
-            </p>
+            <p style={styles.inviteFooter}>USE COM SABEDORIA. O SINAL É ESCASSO.</p>
           </div>
         )}
         
@@ -176,6 +169,18 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* BOTÃO SUPORTE EXPERT - Mistério e Ajuda */}
+      <motion.a
+        href={SUPPORT_BOT_LINK}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={styles.supportBtn}
+        whileHover={{ scale: 1.05, backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(255, 255, 255, 0.2)" }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <span style={styles.supportText}>SUPORTE EXPERT / IA</span>
+      </motion.a>
       
       {selectedPost && (
         <ThreadDrawer 
@@ -208,5 +213,24 @@ const styles = {
   inviteTitle: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, marginBottom: '15px', letterSpacing: '2px', opacity: 0.8 },
   inviteList: { display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' as const },
   inviteCode: { border: '1px solid #00f2fe', color: '#00f2fe', padding: '6px 12px', fontSize: '12px', fontWeight: '900' as const, borderRadius: '8px', background: 'rgba(0, 242, 254, 0.05)' },
-  inviteFooter: { color: '#333', fontSize: '8px', marginTop: '15px', fontWeight: '900' as const, letterSpacing: '1px' }
+  inviteFooter: { color: '#333', fontSize: '8px', marginTop: '15px', fontWeight: '900' as const, letterSpacing: '1px' },
+  supportBtn: {
+    position: "fixed" as const,
+    bottom: "30px",
+    right: "30px",
+    padding: "12px 20px",
+    background: "rgba(0, 0, 0, 0.8)",
+    border: "1px solid rgba(255, 255, 255, 0.05)",
+    borderRadius: "14px",
+    textDecoration: "none",
+    zIndex: 100,
+    backdropFilter: "blur(10px)",
+    transition: "all 0.4s ease",
+  },
+  supportText: {
+    color: "#444", 
+    fontSize: "8px",
+    fontWeight: "900" as const,
+    letterSpacing: "2px",
+  }
 };
