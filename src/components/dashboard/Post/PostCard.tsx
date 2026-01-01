@@ -1,7 +1,6 @@
 ﻿/**
- * PROJETO OUVI – PostCard SENSORIAL (2026)
- * Layout: Ícones à esquerda, frase à direita.
- * Experiência: Feedback tátil visual e profundidade.
+ * PROJETO OUVI – PostCard SENSORIAL ELITE (2026)
+ * Foco: Botão de Conversa com Destaque Especial
  */
 
 "use client";
@@ -18,22 +17,18 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
     supabase.auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id || null));
   }, []);
 
-  const isOwner = currentUserId === post.user_id;
-
   const previewComments = (post.audio_comments || []).slice(0, 4);
 
   return (
     <motion.div 
-      initial={{ opacity: 0, scale: 0.98 }}
-      whileInView={{ opacity: 1, scale: 1 }}
+      initial={{ opacity: 0, y: 15 }}
+      whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      whileHover={{ borderColor: "rgba(0, 242, 254, 0.12)" }}
       style={styles.card}
     >
       <div style={styles.header}>
         <div style={styles.userInfo}>
-          <motion.img 
-            whileHover={{ scale: 1.1 }}
+          <img 
             src={post.profiles?.avatar_url || "/default-avatar.png"} 
             style={styles.avatar} 
             alt="User"
@@ -46,11 +41,7 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
         <button onClick={() => setShowMenu(!showMenu)} style={styles.dotsBtn}>•••</button>
       </div>
 
-      <motion.div 
-        style={styles.content} 
-        onClick={() => onOpenThread(post)}
-        whileTap={{ scale: 0.995 }}
-      >
+      <div style={styles.content} onClick={() => onOpenThread(post)}>
         {post.image_url && (
           <div style={styles.imageContainer}>
             <img src={post.image_url} style={styles.postImage} alt="Post" />
@@ -59,9 +50,9 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
         <div style={styles.bodyTextContainer}>
           {post.content && <p style={styles.text}>{post.content}</p>}
         </div>
-      </motion.div>
+      </div>
 
-      {/* PRÉVIA SENSORIAL (ESCADA) */}
+      {/* ESCADA DE VOZES */}
       {previewComments.length > 0 && (
         <div style={styles.multiPreviewContainer} onClick={() => onOpenThread(post)}>
           {previewComments.map((comm: any, i: number) => (
@@ -79,7 +70,7 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
         </div>
       )}
 
-      {/* FOOTER: A BARRA QUE VOCÊ APROVOU */}
+      {/* FOOTER COM BOTÃO DESTAQUE */}
       <div style={styles.footer}>
         <div style={styles.reactionSide}>
           <ReactionBar 
@@ -89,12 +80,17 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
           />
         </div>
         
+        {/* BOTÃO CONVIDATIVO COM BALÃO DE CONVERSA */}
         <motion.button 
-          whileHover={{ color: "#eee", x: 3 }}
+          whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 242, 254, 0.08)" }}
+          whileTap={{ scale: 0.95 }}
           onClick={() => onOpenThread(post)} 
-          style={styles.viewMoreBtn}
+          style={styles.highlightBtn}
         >
-          O QUE ESTÃO FALANDO... ¬
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: '8px' }}>
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+          </svg>
+          O QUE ESTÃO FALANDO...
         </motion.button>
       </div>
     </motion.div>
@@ -102,7 +98,7 @@ export default function PostCard({ post, onOpenThread, onDelete }: any) {
 }
 
 const styles = {
-  card: { background: "#050505", borderRadius: "28px", border: "1px solid #111", marginBottom: "25px", overflow: "hidden", transition: "border 0.3s ease" },
+  card: { background: "#050505", borderRadius: "28px", border: "1px solid #111", marginBottom: "25px", overflow: "hidden" },
   header: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px" },
   userInfo: { display: "flex", alignItems: "center", gap: "10px" },
   avatar: { width: "36px", height: "36px", borderRadius: "50%", objectFit: "cover" as const, border: "1px solid #222" },
@@ -119,7 +115,29 @@ const styles = {
   previewBox: { background: "rgba(255, 255, 255, 0.02)", padding: "8px 12px", borderRadius: "12px", marginBottom: "6px", border: "1px solid rgba(255,255,255,0.03)" },
   previewUser: { color: "#00f2fe", fontSize: "9px", fontWeight: "900" as const, textTransform: "uppercase" as const },
   previewText: { color: "#666", fontSize: "10px" },
-  footer: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "15px 20px", borderTop: "1px solid #111" },
+  footer: { 
+    display: "flex", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    padding: "12px 15px 12px 20px", 
+    borderTop: "1px solid #111",
+    background: "rgba(255,255,255,0.01)"
+  },
   reactionSide: { display: "flex", alignItems: "center" },
-  viewMoreBtn: { background: "none", border: "none", color: "#333", fontSize: "8px", fontWeight: "900" as const, cursor: "pointer", letterSpacing: "1px", transition: "color 0.2s" }
+  highlightBtn: { 
+    display: "flex",
+    alignItems: "center",
+    background: "rgba(255, 255, 255, 0.03)", 
+    border: "1px solid rgba(255, 255, 255, 0.08)", 
+    color: "#00f2fe", 
+    fontSize: "9px", 
+    fontWeight: "900" as const, 
+    cursor: "pointer", 
+    letterSpacing: "0.5px", 
+    padding: "10px 16px",
+    borderRadius: "20px",
+    boxShadow: "0 4px 15px rgba(0,0,0,0.3)",
+    transition: "all 0.3s ease",
+    textShadow: "0 0 10px rgba(0, 242, 254, 0.3)"
+  }
 };
