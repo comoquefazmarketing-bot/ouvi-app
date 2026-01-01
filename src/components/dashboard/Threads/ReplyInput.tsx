@@ -1,13 +1,8 @@
-﻿/**
- * PROJETO OUVI – REATOR DE ENVIO (Bypass de Erros)
- * Ajuste: Limpeza de campos para garantir inserção no Supabase
- */
-
-"use client";
+﻿"use client";
 import React, { useState } from "react";
-import { supabase } from "../../../lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 import AudioRecorder from "./AudioRecorder";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 export default function ReplyInput({ postId, onRefresh }: any) {
   const [text, setText] = useState("");
@@ -21,23 +16,20 @@ export default function ReplyInput({ postId, onRefresh }: any) {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Enviamos apenas o essencial para evitar erro de coluna inexistente
       const { error } = await supabase.from("audio_comments").insert([{
         post_id: postId,
         content: text,
         user_id: user?.id || null,
-        username: user?.email?.split('@')[0] || 'membro_ouvi'
+        username: user?.user_metadata?.username || user?.email?.split('@')[0] || 'membro'
       }]);
 
-      if (error) {
-        console.error("Erro ao enviar texto:", error.message);
-        alert("Erro ao enviar. Verifique o console.");
-      } else {
-        setText("");
-        if (onRefresh) await onRefresh(); // Força a atualização da lista
-      }
-    } catch (err) { 
-      console.error("Falha crítica:", err); 
+      if (error) throw error;
+
+      setText("");
+      if (onRefresh) await onRefresh(); 
+      
+    } catch (err: any) { 
+      console.error("Falha no envio:", err.message);
     } finally { 
       setLoading(false); 
     }
@@ -70,20 +62,20 @@ export default function ReplyInput({ postId, onRefresh }: any) {
               onPointerDown={() => setIsRecording(true)} 
               onPointerUp={() => setIsRecording(false)}
               onPointerLeave={() => setIsRecording(false)}
-              animate={!isRecording ? { scale: [1, 1.03, 1] } : { scale: 1.15 }}
-              transition={!isRecording ? { duration: 4, repeat: Infinity } : { duration: 0.1 }}
+              animate={!isRecording ? { scale: [1, 1.05, 1] } : { scale: 1.2 }}
+              transition={!isRecording ? { duration: 3, repeat: Infinity } : { duration: 0.1 }}
               style={{
                 ...styles.recorderWrapper,
                 background: isRecording ? "#00f2fe" : "rgba(0, 242, 254, 0.1)",
-                boxShadow: isRecording ? "0 0 20px #00f2fe" : "none"
+                boxShadow: isRecording ? "0 0 25px rgba(0, 242, 254, 0.5)" : "none"
               }}
             >
-              <div style={{ filter: isRecording ? "brightness(0)" : "brightness(1.8)" }}>
+              <div style={{ filter: isRecording ? "brightness(0)" : "brightness(1.5)" }}>
                 <AudioRecorder 
                   postId={postId} 
                   onUploadComplete={() => {
                     setIsRecording(false);
-                    if (onRefresh) onRefresh(); // Atualiza a lista após o áudio subir
+                    if (onRefresh) onRefresh();
                   }} 
                 />
               </div>
@@ -103,7 +95,7 @@ const styles = {
   },
   input: { flex: 1, background: "none", border: "none", color: "#fff", outline: "none", fontSize: "12px", minWidth: "0" },
   actionGroup: { display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 },
-  sendBtn: { background: "none", border: "none", color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer" },
+  sendBtn: { background: "none", border: "none", color: "#00f2fe", fontSize: "10px", fontWeight: "900" as const, cursor: "pointer", padding: "0 10px" },
   micPosition: { position: "relative" as const },
-  recorderWrapper: { borderRadius: "50%", width: "46px", height: "46px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }
+  recorderWrapper: { borderRadius: "50%", width: "46px", height: "46px", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", transition: "background 0.2s" }
 };
