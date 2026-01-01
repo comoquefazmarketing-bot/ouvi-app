@@ -18,7 +18,7 @@ export default function DashboardPage() {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
 
-      // 2. Busca os posts puros (sem relações para não travar)
+      // 2. Busca os posts puros
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*')
@@ -26,7 +26,7 @@ export default function DashboardPage() {
 
       if (postsError) throw postsError;
 
-      // 3. Busca todos os perfis de uma vez
+      // 3. Busca todos os perfis
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, username, avatar_url');
@@ -36,23 +36,19 @@ export default function DashboardPage() {
         .from('audio_comments')
         .select('*');
 
-      // 5. MONTAGEM MANUAL (A prova de falhas)
+      // 5. MONTAGEM MANUAL (Fiel ao seu layout original)
       const merged = (postsData || []).map(post => {
-        // Encontra o perfil do dono do post
         const userProfile = profilesData?.find(p => p.id === post.user_id) || null;
         
-        // Encontra os comentários deste post para a prévia
         const postComments = (commentsData || [])
           .filter(c => c.post_id === post.id)
           .map(c => {
-            // Injeta o perfil de quem comentou dentro do comentário
             const commenterProfile = profilesData?.find(p => p.id === c.user_id);
             return { ...c, profiles: commenterProfile };
           });
 
         return {
           ...post,
-          // Injeta o perfil no post (mantemos 'profiles' e 'profile' para compatibilidade)
           profiles: userProfile,
           profile: userProfile,
           audio_comments: postComments
@@ -89,7 +85,11 @@ export default function DashboardPage() {
       </div>
       
       {selectedPost && (
-        <ThreadDrawer post={selectedPost} onClose={() => setSelectedPost(null)} />
+        <ThreadDrawer 
+          post={selectedPost} 
+          onClose={() => setSelectedPost(null)} 
+          onRefresh={fetchData} // Apenas para atualizar os dados ao fechar/comentar
+        />
       )}
     </div>
   );
