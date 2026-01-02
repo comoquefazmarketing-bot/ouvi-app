@@ -6,9 +6,9 @@ import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
 /**
- * MOTOR DE ÁUDIO SENSORIAL OUVI [cite: 2026-01-01]
- * Foco: Sistema Límbico e Córtex Pré-Frontal.
- * Som viciante, orgânico e premium.
+ * MOTOR DE ÁUDIO SENSORIAL OUVI [cite: 2026-01-02]
+ * Frequência: Deep Bass (45Hz - 90Hz)
+ * Objetivo: Impacto visceral e minimalista.
  */
 const playSensorialSound = () => {
   if (typeof window === "undefined") return;
@@ -16,58 +16,43 @@ const playSensorialSound = () => {
     const context = new (window.AudioContext || (window as any).webkitAudioContext)();
     const masterGain = context.createGain();
     masterGain.connect(context.destination);
-    masterGain.gain.setValueAtTime(0.5, context.currentTime);
+    masterGain.gain.setValueAtTime(0.6, context.currentTime);
 
-    // Efeito de Espacialidade (Eco de Veludo)
+    // Espacialidade Sub-harmônica
     const delay = context.createDelay();
-    delay.delayTime.value = 0.15;
+    delay.delayTime.value = 0.2;
     const feedback = context.createGain();
-    feedback.gain.value = 0.3; 
+    feedback.gain.value = 0.25; 
     const filter = context.createBiquadFilter();
     filter.type = "lowpass";
-    filter.frequency.value = 800; // Remove frequências irritantes
+    filter.frequency.value = 400; // Corta qualquer brilho metálico
 
     delay.connect(feedback);
     feedback.connect(filter);
     filter.connect(delay);
     delay.connect(masterGain);
 
-    // CAMADA 1: O PULSO (Grave Profundo - Segurança)
-    const oscRoot = context.createOscillator();
-    const gainRoot = context.createGain();
-    oscRoot.type = "sine"; 
-    oscRoot.frequency.setValueAtTime(55, context.currentTime); // Nota Lá Sub
-    oscRoot.frequency.exponentialRampToValueAtTime(110, context.currentTime + 0.4);
+    // A FUNDAMENTAL (Grave Orgânico e Aveludado)
+    const osc = context.createOscillator();
+    const gain = context.createGain();
     
-    gainRoot.gain.setValueAtTime(0, context.currentTime);
-    gainRoot.gain.linearRampToValueAtTime(0.4, context.currentTime + 0.05);
-    gainRoot.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.5);
-
-    // CAMADA 2: O BRILHO (Cristalino - Recompensa)
-    const oscSparkle = context.createOscillator();
-    const gainSparkle = context.createGain();
-    oscSparkle.type = "triangle"; 
-    oscSparkle.frequency.setValueAtTime(440, context.currentTime); 
-    oscSparkle.frequency.exponentialRampToValueAtTime(880, context.currentTime + 0.3);
-
-    gainSparkle.gain.setValueAtTime(0, context.currentTime);
-    gainSparkle.gain.linearRampToValueAtTime(0.12, context.currentTime + 0.1);
-    gainSparkle.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.4);
-
-    // Conexões e Disparo
-    oscRoot.connect(gainRoot);
-    gainRoot.connect(masterGain);
+    osc.type = "sine"; // Onda pura para evitar som de console antigo
+    osc.frequency.setValueAtTime(45, context.currentTime); 
+    osc.frequency.exponentialRampToValueAtTime(90, context.currentTime + 0.5);
     
-    oscSparkle.connect(gainSparkle);
-    gainSparkle.connect(delay); 
+    gain.gain.setValueAtTime(0, context.currentTime);
+    gain.gain.linearRampToValueAtTime(0.5, context.currentTime + 0.1);
+    gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.6);
 
-    oscRoot.start();
-    oscSparkle.start();
-    oscRoot.stop(context.currentTime + 0.6);
-    oscSparkle.stop(context.currentTime + 0.6);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    gain.connect(delay); 
+
+    osc.start();
+    osc.stop(context.currentTime + 0.7);
 
   } catch (e) {
-    console.warn("Sinal sensorial bloqueado pelo navegador.");
+    console.warn("Sinal sensorial bloqueado.");
   }
 };
 
@@ -85,7 +70,7 @@ function LoginContent() {
       await supabase.auth.signInWithOAuth({
         provider,
         options: { 
-          // Redirecionamento blindado para evitar loop [cite: 2025-12-30]
+          // Redirecionamento blindado para o callback de servidor [cite: 2025-12-30]
           redirectTo: `${window.location.origin}/auth/callback`,
           queryParams: {
             access_type: 'offline',
