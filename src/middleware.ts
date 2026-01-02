@@ -4,9 +4,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
-  // Ignora rotas de autenticação e arquivos internos para evitar loops
-  if (request.nextUrl.pathname.startsWith('/auth') || 
-      request.nextUrl.pathname.match(/\.(png|jpg|ico|svg|json)$/)) {
+  // 1. ISOLAMENTO TOTAL: Se for auth ou arquivos estáticos, não processe nada
+  const isAuth = request.nextUrl.pathname.startsWith('/auth')
+  const isStatic = request.nextUrl.pathname.match(/\.(png|jpg|ico|svg|json|js|css)$/)
+  
+  if (isAuth || isStatic) {
     return response
   }
 
@@ -32,14 +34,23 @@ export async function middleware(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Se não estiver logado e tentar o app, vai para o login
-  if (!user && (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/onboarding'))) {
+  // 2. PROTEÇÃO DE ROTAS SENSORIAIS
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
+                          request.nextUrl.pathname.startsWith('/onboarding')
+
+  if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  // Se logado e no login, pula pro dashboard
+  if (user && request.nextUrl.pathname === '/login') {
+    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   return response
 }
 
 export const config = {
+  // Matcher refinado para não engasgar o Next.js
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }
