@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
-  // 1. ISOLAMENTO TOTAL: Se for auth ou arquivos estáticos, não processe nada
+  // 1. ISOLAMENTO TOTAL: Bypass para auth e arquivos estáticos (Evita Loops)
   const isAuth = request.nextUrl.pathname.startsWith('/auth')
   const isStatic = request.nextUrl.pathname.match(/\.(png|jpg|ico|svg|json|js|css)$/)
   
@@ -32,25 +32,31 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Busca o usuário atual de forma segura
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 2. PROTEÇÃO DE ROTAS SENSORIAIS
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
-                          request.nextUrl.pathname.startsWith('/onboarding')
+  const isLoginPath = request.nextUrl.pathname === '/login'
+  const isOnboardingPath = request.nextUrl.pathname === '/onboarding'
+  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || isOnboardingPath
 
+  // 2. REDIRECIONAMENTOS INTELIGENTES
+  
+  // Caso 1: Não logado tentando acessar área restrita -> Login
   if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Se logado e no login, pula pro dashboard
-  if (user && request.nextUrl.pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+  // Caso 2: Logado no Login -> Vai para Onboarding (triagem)
+  if (user && isLoginPath) {
+    return NextResponse.redirect(new URL('/onboarding', request.url))
   }
+
+  // Nota: O próprio Onboarding decidirá se manda para o Dashboard 
+  // baseado no perfil salvo no banco, como fizemos no código anterior.
 
   return response
 }
 
 export const config = {
-  // Matcher refinado para não engasgar o Next.js
   matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 }

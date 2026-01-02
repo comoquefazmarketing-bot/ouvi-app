@@ -1,65 +1,124 @@
 ﻿"use client";
 
 import React, { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import { motion } from "framer-motion";
 
+// Componentes de Layout e Passos
+import OnboardingLayout from "./OnboardingLayout";
+import AvatarSelector from "./AvatarSelector";
+import NickSelector from "./NickSelector";
+
 export default function OnboardingPage() {
-  const [nickname, setNickname] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
   const router = useRouter();
+  const [step, setStep] = useState(0); // 0: Check, 1: Avatar, 2: Nick
+  const [loading, setLoading] = useState(false);
+  const [userData, setUserData] = useState({ id: "", avatar: "", nick: "" });
 
   useEffect(() => {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) router.push("/login");
-      else setUserId(user.id);
+      
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // Verifica se o perfil já está sintonizado no banco
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.onboarding_completed) {
+        router.push("/dashboard");
+      } else {
+        setUserData({
+          id: user.id,
+          avatar: user.user_metadata.avatar_url || "",
+          nick: user.user_metadata.full_name || "",
+        });
+        setStep(1); // Inicia no passo do Avatar
+      }
     };
     checkUser();
   }, [router]);
 
-  const handleFinish = async () => {
-    if (!userId || nickname.length < 3) return;
+  const handleFinish = async (finalNick: string) => {
+    if (!userData.id || finalNick.length < 3) return;
     setLoading(true);
 
-    // Salva o perfil e marca como sintonizado
+    const inviteCode = localStorage.getItem("ouvi_invite_code");
+
+    // Salva o perfil completo e marca como concluído
     const { error } = await supabase.from("profiles").upsert({
-      id: userId,
-      username: nickname.trim().toLowerCase(),
+      id: userData.id,
+      username: finalNick.trim().toLowerCase(),
+      avatar_url: userData.avatar,
       onboarding_completed: true,
+      invite_used: inviteCode,
       updated_at: new Date()
     });
 
     if (!error) {
+      localStorage.removeItem("ouvi_invite_code");
       router.push("/dashboard");
     } else {
-      console.error(error);
-      alert("Erro na sintonização. Tente outro nome.");
+      console.error("Erro na sintonização:", error);
+      alert("Este nome já está em uso ou houve um erro. Tente outro.");
       setLoading(false);
     }
   };
 
+  if (step === 0) return <div style={{ background: "#000", height: "100vh" }} />;
+
   return (
-    <div style={{ background: "#000", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: "center", maxWidth: "300px" }}>
-        <h2 style={{ letterSpacing: "4px", fontSize: "10px", opacity: 0.6 }}>SINAL DE IDENTIFICAÇÃO</h2>
-        <input 
-          autoFocus
-          style={{ background: "none", border: "none", borderBottom: "1px solid #00f2fe", color: "#fff", textAlign: "center", padding: "10px", marginTop: "20px", outline: "none", width: "100%", fontSize: "18px" }}
-          value={nickname}
-          onChange={(e) => setNickname(e.target.value)}
-          placeholder="seu_nome"
+    <OnboardingLayout>
+      {step === 1 && (
+        <AvatarSelector 
+          avatarUrl={userData.avatar} 
+          onNext={() => setStep(2)} 
         />
-        <button 
-          onClick={handleFinish}
-          disabled={loading || nickname.length < 3}
-          style={{ marginTop: "50px", background: nickname.length >= 3 ? "#00f2fe" : "#222", color: "#000", border: "none", padding: "15px 40px", borderRadius: "30px", fontWeight: "900", cursor: "pointer", transition: "0.3s" }}
+      )}
+      {step === 2 && (
+        <NickSelector 
+          initialNick={userData.nick} 
+          onFinish={handleFinish} 
+        />
+      )}
+      
+      {loading && (
+        <motion.div 
+          initial={{ opacity: 0 }} 
+          animate={{ opacity: 1 }}
+          style={styles.loadingOverlay}
         >
-          {loading ? "SINTONIZANDO..." : "CONFIRMAR SINTONIA"}
-        </button>
-      </motion.div>
-    </div>
+          <p style={styles.loadingText}>SINTONIZANDO...</p>
+        </motion.div>
+      )}
+    </OnboardingLayout>
   );
 }
+
+const styles = {
+  loadingOverlay: {
+    position: "absolute" as const,
+    top: 0,
+    left: 0,
+    width: "100%",
+    height: "100%",
+    background: "rgba(0,0,0,0.8)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100
+  },
+  loadingText: {
+    color: "#00f2fe",
+    letterSpacing: "4px",
+    fontSize: "12px",
+    fontWeight: "900"
+  }
+};
