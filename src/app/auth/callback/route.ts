@@ -7,7 +7,7 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
 
   if (code) {
-    const cookieStore = await cookies() // Ajuste assíncrono essencial
+    const cookieStore = await cookies() // Ajuste assíncrono para Next.js 15
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -24,13 +24,14 @@ export async function GET(request: Request) {
       }
     )
     
-    // Troca o sinal pelo acesso real
+    // Troca o código pela sessão real do usuário
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     if (!error) {
+      // Sintonização concluída, segue para o Onboarding [cite: 2026-01-01]
       return NextResponse.redirect(`${origin}/onboarding`)
     }
   }
 
-  // Se falhar, volta para o login para não travar em tela branca
+  // Em caso de falha de sintonização, retorna ao login
   return NextResponse.redirect(`${origin}/login?error=auth_failed`)
 }
