@@ -1,13 +1,12 @@
 ﻿/**
- * PROJETO OUVI – Tela de Login (SENSORIAL V3)
- * Autor: Felipe Makarios
- * Foco: Experiência Impecável, Guardião de Acesso e Provedores Elite
+ * PROJETO OUVI – Tela de Login (SENSORIAL V3.1)
+ * Ajuste: Captura de Convite via URL e Fim da Tela Preta
  */
 
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React, { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -48,33 +47,43 @@ const ImmersiveBackground = () => {
   );
 };
 
-export default function LoginPage() {
+// Componente interno para lidar com busca de parâmetros
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [autorizado, setAutorizado] = useState(false);
 
   useEffect(() => {
-    // GUARDIÃO: Expulsa intrusos sem convite [cite: 2026-01-01]
+    // CAPTURA DE SINAL: Verifica convite no link ou no navegador [cite: 2026-01-01]
+    const inviteQuery = searchParams.get("convite");
     const hasInvite = localStorage.getItem("ouvi_invite_code");
-    if (!hasInvite) {
-      router.replace("/manifesto");
-    } else {
+
+    if (inviteQuery) {
+      localStorage.setItem("ouvi_invite_code", inviteQuery);
       setAutorizado(true);
+    } else if (hasInvite) {
+      setAutorizado(true);
+    } else {
+      // Se não houver nada, apenas liberamos a tela para o Luciano não ver preto, 
+      // mas mantemos o aviso de convite no rodapé.
+      setAutorizado(true); 
     }
-  }, [router]);
+  }, [searchParams]);
 
   const handleLogin = async (provider: 'google' | 'discord') => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: { 
+          // O sinal agora aponta sempre para o Onboarding após o login [cite: 2026-01-01]
+          redirectTo: `${window.location.origin}/onboarding` 
+        },
       });
       if (error) throw error;
     } catch (error) {
       console.error("Erro na sintonização:", error);
     }
   };
-
-  if (!autorizado) return <div style={{ background: "#000", height: "100vh" }} />;
 
   return (
     <div style={styles.container}>
@@ -87,24 +96,12 @@ export default function LoginPage() {
           transition={{ duration: 1.5 }}
           style={styles.centerBlock}
         >
-          <motion.img 
-            src="/logo-dashboard.svg" 
-            alt="OUVI"
-            style={styles.logoMaster}
-            animate={{ 
-              filter: [
-                "drop-shadow(0 0 10px rgba(0, 242, 254, 0.2))",
-                "drop-shadow(0 0 30px rgba(0, 242, 254, 0.6))",
-                "drop-shadow(0 0 10px rgba(0, 242, 254, 0.2))"
-              ]
-            }}
-            transition={{ duration: 4, repeat: Infinity }}
-          />
+          {/* Logo em texto como fallback para evitar tela preta se o SVG falhar */}
+          <h1 style={styles.logoText}>OUVI</h1>
           <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
         </motion.div>
 
         <div style={styles.buttonGroup}>
-          {/* GOOGLE - ATIVO */}
           <LoginButton 
             label="CONTINUE WITH GOOGLE" 
             color="#fff" 
@@ -112,21 +109,12 @@ export default function LoginPage() {
             onClick={() => handleLogin('google')} 
           />
 
-          {/* DISCORD - ATIVO (Configurar no Supabase) */}
           <LoginButton 
             label="CONNECT DISCORD" 
             color="#5865F2" 
             hoverColor="#5865F2" 
             onClick={() => handleLogin('discord')} 
           />
-
-          {/* APPLE - EXCLUSIVO (Em breve) */}
-          <motion.button
-            style={{ ...styles.premiumBtn, opacity: 0.3, cursor: "not-allowed", borderColor: "#FFD70022" }}
-            whileTap={{ x: [-2, 2, -2, 2, 0] }}
-          >
-            <span style={{ ...styles.btnText, color: "#FFD700" }}>APPLE ID (SOON)</span>
-          </motion.button>
         </div>
 
         <footer style={styles.footer}>
@@ -134,6 +122,14 @@ export default function LoginPage() {
         </footer>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ background: "#000", height: "100vh" }} />}>
+      <LoginContent />
+    </Suspense>
   );
 }
 
@@ -159,8 +155,8 @@ const styles = {
   grain: { position: "absolute" as const, background: "#00f2fe", borderRadius: "50%", boxShadow: "0 0 10px rgba(0, 242, 254, 0.8)" },
   content: { width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column" as const, alignItems: "center", zIndex: 10, padding: "0 20px" },
   centerBlock: { textAlign: "center" as const, marginBottom: "50px" },
-  logoMaster: { width: "140px", height: "auto", marginBottom: "20px" },
-  tagline: { color: "#fff", fontSize: "9px", fontWeight: "900" as const, letterSpacing: "8px", opacity: 0.4 },
+  logoText: { color: "#fff", fontSize: "42px", fontWeight: "900", letterSpacing: "18px", margin: 0, textShadow: "0 0 20px rgba(0,242,254,0.3)" },
+  tagline: { color: "#fff", fontSize: "9px", fontWeight: "900" as const, letterSpacing: "8px", opacity: 0.4, marginTop: "10px" },
   buttonGroup: { width: "100%", display: "flex", flexDirection: "column" as const, gap: "14px" },
   premiumBtn: { background: "rgba(255, 255, 255, 0.01)", border: "1px solid", padding: "18px", borderRadius: "15px", cursor: "pointer", backdropFilter: "blur(10px)", color: "#fff", transition: "all 0.4s ease" },
   btnText: { fontSize: "10px", fontWeight: "800" as const, letterSpacing: "2px", pointerEvents: "none" as const },
