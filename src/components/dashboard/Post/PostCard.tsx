@@ -4,9 +4,6 @@ import ReactionBar from "@/components/dashboard/Threads/ReactionBar";
 import { motion } from "framer-motion";
 
 export default function PostCard({ post, onOpenThread, onRefresh }: any) {
-  // Simplificamos a lógica para focar na harmonia visual
-  const zapCount = (post.reactions || []).filter((r: any) => r.type === 'zap').length;
-
   return (
     <div style={cardStyles.card}>
       <div style={cardStyles.header}>
@@ -37,35 +34,20 @@ export default function PostCard({ post, onOpenThread, onRefresh }: any) {
       </div>
 
       <div style={cardStyles.footer}>
-        {/* PÍLULA SENSORIAL: Onde a reação acontece agora */}
-        <motion.div 
-          style={cardStyles.reactionPill}
-          whileHover={{ 
-            scale: 1.02, 
-            backgroundColor: "rgba(255, 255, 255, 0.05)",
-            boxShadow: "0 4px 15px rgba(0, 242, 254, 0.1)" 
-          }}
-        >
-          <ReactionBar 
-            postId={post.id} 
-            initialReactions={post.reactions} 
-            onReply={() => onOpenThread(post)} 
-            onRefresh={onRefresh} 
-          />
-        </motion.div>
+        <ReactionBar 
+          postId={post.id} 
+          initialReactions={post.reactions} 
+          onOpenThread={() => onOpenThread(post)} 
+          onRefresh={onRefresh} 
+        />
         
-        {/* BOTÃO AJUSTADO: Trava de segurança para não estourar a margem */}
         <motion.button 
           onClick={() => onOpenThread(post)} 
-          style={{
-            ...cardStyles.coreBtn,
-            color: zapCount > 10 ? "#FFD700" : "#00f2fe",
-            borderColor: zapCount > 10 ? "rgba(255, 215, 0, 0.3)" : "rgba(0, 242, 254, 0.2)"
-          }}
-          whileHover={{ scale: 1.05, backgroundColor: "rgba(0, 242, 254, 0.08)" }}
+          style={cardStyles.coreBtn}
+          whileHover={{ scale: 1.02, backgroundColor: "rgba(0, 242, 254, 0.1)" }}
           whileTap={{ scale: 0.95 }}
         >
-          OUVIR DISCUSSÃO
+          O QUE ESTÃO FALANDO...
         </motion.button>
       </div>
     </div>
@@ -73,14 +55,7 @@ export default function PostCard({ post, onOpenThread, onRefresh }: any) {
 }
 
 const cardStyles = {
-  card: { 
-    background: "#050505", 
-    borderRadius: "32px", 
-    marginBottom: "30px", 
-    overflow: "hidden", 
-    border: "1px solid rgba(255,255,255,0.03)",
-    position: "relative" as const
-  },
+  card: { background: "#050505", borderRadius: "32px", marginBottom: "30px", overflow: "hidden", border: "1px solid rgba(255,255,255,0.03)", position: "relative" as const },
   header: { padding: "20px 24px" },
   userInfo: { display: "flex", alignItems: "center", gap: "12px" },
   avatar: { width: "36px", height: "36px", borderRadius: "14px", border: "1px solid rgba(255,255,255,0.1)", objectFit: "cover" as const },
@@ -91,35 +66,24 @@ const cardStyles = {
   bodyTextContainer: { padding: "20px 24px" },
   text: { color: "rgba(255,255,255,0.7)", fontSize: "15px", fontWeight: "300" as const, lineHeight: "1.5" },
   footer: { 
-    padding: "16px 20px", 
+    padding: "16px 12px", 
     display: "flex", 
     justifyContent: "space-between", 
     alignItems: "center",
     borderTop: "1px solid rgba(255,255,255,0.03)",
-    gap: "10px"
-  },
-  reactionPill: {
-    background: "rgba(255,255,255,0.02)",
-    padding: "6px 14px",
-    borderRadius: "100px",
-    border: "1px solid rgba(255,255,255,0.05)",
-    transition: "all 0.3s ease",
-    display: "flex",
-    alignItems: "center"
+    gap: "4px"
   },
   coreBtn: { 
     background: "rgba(0, 0, 0, 0.4)", 
-    border: "1px solid", 
-    fontSize: "8px", 
+    border: "1px solid rgba(0, 242, 254, 0.2)", 
+    color: "#00f2fe",
+    fontSize: "9px", 
     fontWeight: "900" as const, 
-    padding: "10px 14px", 
+    padding: "10px 12px", 
     borderRadius: "14px", 
     cursor: "pointer", 
-    letterSpacing: "1.5px",
-    maxWidth: "135px", // Trava para não estourar a margem (conforme imagem)
-    whiteSpace: "nowrap" as const,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    transition: "all 0.2s ease"
+    letterSpacing: "0.5px",
+    whiteSpace: "nowrap" as const, // Garante linha única
+    flexShrink: 0
   }
 };
