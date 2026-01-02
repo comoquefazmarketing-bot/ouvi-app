@@ -1,5 +1,5 @@
 ﻿"use client";
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -7,130 +7,93 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
   const [isElectrified, setIsElectrified] = useState(false);
   const [liked, setLiked] = useState(false);
 
-  const handleSignal = async (type: 'zap' | 'heart' | 'mic') => {
+  const counts = useMemo(() => ({
+    zap: (initialReactions || []).filter((r: any) => r.type === 'zap').length,
+    mic: (initialReactions || []).filter((r: any) => r.type === 'mic').length,
+    heart: (initialReactions || []).filter((r: any) => r.type === 'heart').length,
+  }), [initialReactions]);
+
+  // A pílula carrega energia ao vivo se passar de 10 Zaps
+  const isHighEnergy = counts.zap > 10;
+
+  const handleSignal = async (e: React.MouseEvent, type: 'zap' | 'heart' | 'mic') => {
+    e.preventDefault();
+    e.stopPropagation(); // PARA A PROPAGAÇÃO: Garante que o clique não "vaze" para o card
+
+    if (type === 'mic') {
+      onOpenThread(); // Abre o portal do ThreadDrawer
+      return;
+    }
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       if (type === 'zap') {
         setIsElectrified(true);
-        setTimeout(() => setIsElectrified(false), 800);
+        setTimeout(() => setIsElectrified(false), 1200);
       }
-      
       if (type === 'heart') setLiked(true);
 
-      const { error } = await supabase
-        .from('post_reactions')
-        .insert([{ post_id: postId, user_id: user.id, type }]);
-
-      if (!error && onRefresh) onRefresh(); 
+      await supabase.from('post_reactions').insert([{ post_id: postId, user_id: user.id, type }]);
+      if (onRefresh) onRefresh(); 
     } catch (err) {
       console.error("Erro no sinal:", err);
     }
   };
 
-  const getCount = (type: string) => (initialReactions || []).filter((r: any) => r.type === type).length;
-
   return (
-    <div style={styles.pillContainer}>
+    <div style={styles.pillContainer} onClick={(e) => e.stopPropagation()}>
+      {/* O RAIO DE BORDA (Energia Persistente) */}
       <AnimatePresence>
-        {isElectrified && (
+        {(isElectrified || isHighEnergy) && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.5 }} 
-            animate={{ opacity: [0, 1, 0], scale: [1, 2.5] }} 
-            style={styles.shock} 
+            initial={{ opacity: 0 }}
+            animate={{ 
+              opacity: [0.4, 1, 0.4],
+              boxShadow: [
+                "0 0 10px #ffdf00, inset 0 0 5px #ffdf00",
+                "0 0 25px #ffdf00, inset 0 0 12px #ffdf00",
+                "0 0 10px #ffdf00, inset 0 0 5px #ffdf00"
+              ]
+            }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.8, repeat: Infinity }}
+            style={styles.lightningBorder}
           />
         )}
       </AnimatePresence>
 
-      <div style={styles.pill}>
-        {/* ENERGIA (ZAP) */}
-        <motion.button 
-          onClick={() => handleSignal('zap')} 
-          style={styles.iconBtn}
-          whileHover={{ scale: 1.2, rotate: -10 }}
-          whileTap={{ scale: 0.8 }}
-        >
-          <span style={{...styles.emoji, color: "#ffdf00"}}>⚡</span>
-          <AnimatePresence mode="wait">
-            <motion.span 
-              key={getCount('zap')}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 0.6, y: 0 }}
-              style={styles.count}
-            >
-              {getCount('zap')}
-            </motion.span>
-          </AnimatePresence>
-        </motion.button>
+      <div style={{
+        ...styles.pill, 
+        borderColor: isHighEnergy ? "rgba(255, 223, 0, 0.4)" : "rgba(255,255,255,0.08)"
+      }}>
+        <div style={styles.reactionGroup}>
+          <motion.button onClick={(e) => handleSignal(e, 'zap')} style={styles.iconBtn} whileHover={{ scale: 1.2 }}>
+            <span style={{...styles.emoji, color: "#ffdf00"}}>⚡</span>
+            <span style={styles.count}>{counts.zap}</span>
+          </motion.button>
+
+          <motion.button onClick={(e) => handleSignal(e, 'mic')} style={styles.iconBtn} whileHover={{ scale: 1.2, y: -2 }}>
+            <span style={{...styles.emoji, color: "#00f2fe"}}>🎙️</span>
+            <span style={styles.count}>{counts.mic}</span>
+          </motion.button>
+
+          <motion.button onClick={(e) => handleSignal(e, 'heart')} style={styles.iconBtn} whileHover={{ scale: 1.2 }}>
+            <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} style={styles.emoji}>❤️</motion.span>
+            <span style={styles.count}>{counts.heart}</span>
+          </motion.button>
+        </div>
 
         <div style={styles.divider} />
 
-        {/* MICROFONE (CORE) */}
+        {/* BALÃO - PORTAL DIRETO PARA O THREAD DRAWER */}
         <motion.button 
-          onClick={() => handleSignal('mic')} 
-          style={styles.iconBtn}
-          whileHover={{ scale: 1.2, y: -2 }}
-          whileTap={{ scale: 0.8 }}
+          onClick={(e) => { e.stopPropagation(); onOpenThread(); }} 
+          style={styles.balloonBtn}
+          whileHover={{ scale: 1.3, rotate: -5, filter: "drop-shadow(0 0 8px #00f2fe)" }}
         >
-          <span style={{...styles.emoji, color: "#00f2fe"}}>🎙️</span>
-          <AnimatePresence mode="wait">
-            <motion.span 
-              key={getCount('mic')}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 0.6, y: 0 }}
-              style={styles.count}
-            >
-              {getCount('mic')}
-            </motion.span>
-          </AnimatePresence>
-        </motion.button>
-
-        <div style={styles.divider} />
-
-        {/* CORAÇÃO (BATIDA REAL) */}
-        <motion.button 
-          onClick={() => handleSignal('heart')} 
-          style={styles.iconBtn}
-          whileHover={{ scale: 1.2 }}
-          whileTap={{ scale: 0.8 }}
-        >
-          <motion.span 
-            animate={liked ? {
-              scale: [1, 1.3, 1.1, 1.5, 1],
-              color: "#ff0000",
-              filter: "drop-shadow(0 0 8px #ff0000)"
-            } : {
-              scale: 1,
-              color: "rgba(255, 255, 255, 0.3)"
-            }}
-            transition={liked ? { duration: 0.6, ease: "easeInOut" } : {}}
-            style={styles.emoji}
-          >
-            ❤️
-          </motion.span>
-          <AnimatePresence mode="wait">
-            <motion.span 
-              key={getCount('heart')}
-              initial={{ opacity: 0, y: 5 }}
-              animate={{ opacity: 0.6, y: 0 }}
-              style={styles.count}
-            >
-              {getCount('heart')}
-            </motion.span>
-          </AnimatePresence>
-        </motion.button>
-
-        <div style={styles.divider} />
-
-        {/* PORTAL BALÃO (COMENTÁRIOS) */}
-        <motion.button 
-          onClick={onOpenThread} 
-          style={styles.iconBtn}
-          whileHover={{ scale: 1.2, x: 2 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <span style={{...styles.emoji, color: "#fff", opacity: 0.8}}>🗯️</span>
+          <span style={styles.balloonEmoji}>🗯️</span>
         </motion.button>
       </div>
     </div>
@@ -139,14 +102,25 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 
 const styles = {
   pillContainer: { position: "relative" as const, display: "flex", alignItems: "center" },
-  shock: { position: "absolute" as const, inset: -10, borderRadius: "100px", border: "2px solid #ffdf00", pointerEvents: "none" as const },
-  pill: { 
-    display: "flex", alignItems: "center", padding: "6px 14px", 
-    background: "rgba(10, 10, 10, 0.9)", backdropFilter: "blur(25px)", 
-    borderRadius: "100px", border: "1px solid rgba(255,255,255,0.08)", gap: "10px" 
+  lightningBorder: { 
+    position: "absolute" as const, 
+    inset: -3, 
+    borderRadius: "100px", 
+    border: "2px solid #ffdf00", 
+    pointerEvents: "none" as const,
+    zIndex: 0
   },
-  iconBtn: { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", outline: "none" },
-  emoji: { fontSize: "15px", display: "block" },
-  count: { fontSize: "10px", color: "#fff", fontWeight: "900" as const, fontFamily: "monospace" },
-  divider: { width: "1px", height: "14px", background: "rgba(255,255,255,0.12)" }
+  pill: { 
+    display: "flex", alignItems: "center", padding: "4px 10px", 
+    background: "rgba(10, 10, 10, 0.95)", backdropFilter: "blur(20px)", 
+    borderRadius: "100px", border: "1px solid", gap: "6px",
+    position: "relative" as const, zIndex: 1
+  },
+  reactionGroup: { display: "flex", alignItems: "center", gap: "8px" },
+  iconBtn: { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", padding: "2px", outline: "none" },
+  emoji: { fontSize: "14px" },
+  count: { fontSize: "9px", color: "#fff", fontWeight: "900" as const, opacity: 0.6, fontFamily: "monospace" },
+  divider: { width: "1px", height: "12px", background: "rgba(255,255,255,0.15)" },
+  balloonBtn: { background: "none", border: "none", cursor: "pointer", padding: "2px", display: "flex", alignItems: "center", outline: "none" },
+  balloonEmoji: { fontSize: "16px", opacity: 0.9 }
 };
