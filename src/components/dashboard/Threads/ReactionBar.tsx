@@ -1,5 +1,5 @@
 ﻿"use client";
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -7,26 +7,40 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
   const [isElectrified, setIsElectrified] = useState(false);
   const [liked, setLiked] = useState(false);
   const [liveReactions, setLiveReactions] = useState(initialReactions || []);
+  const channelRef = useRef<any>(null); // Referência estável para não duplicar conexões
 
-  // MOTOR REALTIME: Mantém os números sintonizados sem refresh
   useEffect(() => {
     setLiveReactions(initialReactions);
-    const channel = supabase
-      .channel(`live_reactions_${postId}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'post_reactions',
-        filter: `post_id=eq.${postId}` 
-      }, (payload) => {
-        setLiveReactions((prev: any) => [...prev, payload.new]);
-        if (payload.new.type === 'zap') {
-          setIsElectrified(true);
-          setTimeout(() => setIsElectrified(false), 1000);
-        }
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+
+    // Só liga o Realtime se o postId existir e evita múltiplas conexões
+    if (postId && !channelRef.current) {
+      channelRef.current = supabase
+        .channel(`reactions_${postId}`)
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'post_reactions',
+          filter: `post_id=eq.${postId}` 
+        }, (payload) => {
+          setLiveReactions((prev: any) => [...prev, payload.new]);
+          if (payload.new.type === 'zap') {
+            setIsElectrified(true);
+            setTimeout(() => setIsElectrified(false), 1000);
+          }
+        })
+        .subscribe((status) => {
+          if (status === 'CLOSED') {
+             console.log("Reconnecting portal...");
+          }
+        });
+    }
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
+    };
   }, [postId, initialReactions]);
 
   const counts = useMemo(() => ({
@@ -58,21 +72,20 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 
   return (
     <div style={styles.pillContainer} onClick={(e) => e.stopPropagation()}>
-      {/* O RAIO PERSISTENTE EM VOLTA DA PÍLULA */}
       <AnimatePresence>
         {(isElectrified || counts.zap > 10) && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ 
-              opacity: [0.4, 1, 0.4],
+              opacity: [0.3, 0.7, 0.3], // Reduzi a opacidade para aliviar a GPU
               boxShadow: [
-                "0 0 10px #ffdf00, inset 0 0 5px #ffdf00",
-                "0 0 25px #ffdf00, inset 0 0 12px #ffdf00",
-                "0 0 10px #ffdf00, inset 0 0 5px #ffdf00"
+                "0 0 10px #ffdf00",
+                "0 0 20px #ffdf00",
+                "0 0 10px #ffdf00"
               ]
             }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.8, repeat: Infinity }}
+            transition={{ duration: 1, repeat: Infinity }}
             style={styles.lightningBorder}
           />
         )}
@@ -80,38 +93,33 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 
       <div style={{
         ...styles.pill, 
-        borderColor: counts.zap > 10 ? "rgba(255, 223, 0, 0.4)" : "rgba(255,255,255,0.08)"
+        borderColor: counts.zap > 10 ? "rgba(255, 223, 0, 0.3)" : "rgba(255,255,255,0.08)"
       }}>
         <div style={styles.reactionGroup}>
-          {/* ZAP */}
-          <motion.button onClick={(e) => handleSignal(e, 'zap')} style={styles.iconBtn} whileHover={{ scale: 1.2 }}>
+          <button onClick={(e) => handleSignal(e, 'zap')} style={styles.iconBtn}>
             <span style={{...styles.emoji, color: "#ffdf00"}}>⚡</span>
             <span style={styles.count}>{counts.zap}</span>
-          </motion.button>
+          </button>
 
-          {/* MIC - PORTAL */}
-          <motion.button onClick={(e) => handleSignal(e, 'mic')} style={styles.iconBtn} whileHover={{ scale: 1.2, y: -2 }}>
+          <button onClick={(e) => handleSignal(e, 'mic')} style={styles.iconBtn}>
             <span style={{...styles.emoji, color: "#00f2fe"}}>🎙️</span>
             <span style={styles.count}>{counts.mic}</span>
-          </motion.button>
+          </button>
 
-          {/* HEART */}
-          <motion.button onClick={(e) => handleSignal(e, 'heart')} style={styles.iconBtn} whileHover={{ scale: 1.2 }}>
-            <motion.span animate={liked ? { scale: [1, 1.4, 1] } : {}} style={styles.emoji}>❤️</motion.span>
+          <button onClick={(e) => handleSignal(e, 'heart')} style={styles.iconBtn}>
+            <motion.span animate={liked ? { scale: [1, 1.3, 1] } : {}} style={styles.emoji}>❤️</motion.span>
             <span style={styles.count}>{counts.heart}</span>
-          </motion.button>
+          </button>
         </div>
 
         <div style={styles.divider} />
 
-        {/* BALÃO - PORTAL COM EFEITO PREMIUM */}
-        <motion.button 
+        <button 
           onClick={(e) => { e.stopPropagation(); onOpenThread(); }} 
           style={styles.balloonBtn}
-          whileHover={{ scale: 1.3, rotate: -5, filter: "drop-shadow(0 0 8px #00f2fe)" }}
         >
           <span style={styles.balloonEmoji}>🗯️</span>
-        </motion.button>
+        </button>
       </div>
     </div>
   );
@@ -119,10 +127,10 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 
 const styles = {
   pillContainer: { position: "relative" as const, display: "flex", alignItems: "center" },
-  lightningBorder: { position: "absolute" as const, inset: -3, borderRadius: "100px", border: "2px solid #ffdf00", pointerEvents: "none" as const, zIndex: 0 },
+  lightningBorder: { position: "absolute" as const, inset: -3, borderRadius: "100px", border: "1.5px solid #ffdf00", pointerEvents: "none" as const, zIndex: 0 },
   pill: { 
     display: "flex", alignItems: "center", padding: "4px 10px", 
-    background: "rgba(10, 10, 10, 0.95)", backdropFilter: "blur(20px)", 
+    background: "rgba(10, 10, 10, 0.98)", backdropFilter: "blur(10px)", 
     borderRadius: "100px", border: "1px solid", gap: "6px",
     position: "relative" as const, zIndex: 1
   },
