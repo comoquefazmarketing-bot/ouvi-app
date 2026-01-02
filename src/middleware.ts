@@ -24,19 +24,20 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Usamos getUser em vez de getSession para maior segurança no Next.js 15
+  // Usamos getUser para garantir que o cookie de sintonização é válido [cite: 2025-12-30]
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuthPage = request.nextUrl.pathname === '/login'
   const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || 
                           request.nextUrl.pathname.startsWith('/onboarding')
+  
+  const isAuthPage = request.nextUrl.pathname === '/login'
 
-  // Se não tiver usuário e tentar acessar rota protegida, manda pro login
+  // Bloqueio de acesso sem sintonização
   if (!user && isProtectedRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
-  // Se já estiver logado e tentar ir pro login, manda pro dashboard
+  // Se já estiver sintonizado, não precisa ver o login
   if (user && isAuthPage) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
@@ -45,6 +46,6 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Otimizado para ignorar arquivos estáticos e focar nas rotas do app
+  // Monitora apenas as rotas vitais para performance máxima
   matcher: ['/dashboard/:path*', '/onboarding/:path*', '/login'],
 }

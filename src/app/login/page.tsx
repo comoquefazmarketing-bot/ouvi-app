@@ -5,6 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
+/**
+ * PROJETO OUVI – Sintonização com Delay Sensorial [cite: 2026-01-01]
+ */
 const playSensorialSound = () => {
   if (typeof window === "undefined") return;
   try {
@@ -54,18 +57,17 @@ function LoginContent() {
   const handleLogin = async (provider: 'google' | 'discord') => {
     playSensorialSound(); 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
+      await supabase.auth.signInWithOAuth({
         provider,
         options: { 
+          // O segredo para evitar o erro de fragmento (#) é o redirectTo para o callback [cite: 2025-12-29]
           redirectTo: `${window.location.origin}/auth/callback`,
-          skipBrowserRedirect: false,
           queryParams: {
             access_type: 'offline',
             prompt: 'consent',
           }
         },
       });
-      if (error) throw error;
     } catch (e) {
       console.error("Erro na sintonização:", e);
     }

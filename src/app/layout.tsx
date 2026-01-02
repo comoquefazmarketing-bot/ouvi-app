@@ -1,7 +1,6 @@
 ﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-// Configuração do Manifesto e Identidade Visual (PWA)
 export const metadata: Metadata = {
   title: "OUVI",
   description: "Experiência Sensorial de Áudio",
@@ -12,11 +11,13 @@ export const metadata: Metadata = {
     title: "OUVI",
   },
   icons: {
+    // Garante que o favicon e a logo mobile sejam encontrados
+    icon: "/icon-192.png",
     apple: "/icon-192.png",
+    shortcut: "/icon-192.png",
   },
 };
 
-// Configuração da Tela (Evita que o usuário dê zoom e quebre a experiência)
 export const viewport: Viewport = {
   themeColor: "#000000",
   width: "device-width",
