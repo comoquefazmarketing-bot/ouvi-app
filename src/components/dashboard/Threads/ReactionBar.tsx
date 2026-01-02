@@ -1,53 +1,27 @@
 ﻿"use client";
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function ReactionBar({ postId, initialReactions, onOpenThread, onRefresh }: any) {
   const [isElectrified, setIsElectrified] = useState(false);
   const [liked, setLiked] = useState(false);
-  const [liveReactions, setLiveReactions] = useState(initialReactions || []);
-  const channelRef = useRef<any>(null); // Referência estável para não duplicar conexões
-
-  useEffect(() => {
-    setLiveReactions(initialReactions);
-
-    // Só liga o Realtime se o postId existir e evita múltiplas conexões
-    if (postId && !channelRef.current) {
-      channelRef.current = supabase
-        .channel(`reactions_${postId}`)
-        .on('postgres_changes', { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'post_reactions',
-          filter: `post_id=eq.${postId}` 
-        }, (payload) => {
-          setLiveReactions((prev: any) => [...prev, payload.new]);
-          if (payload.new.type === 'zap') {
-            setIsElectrified(true);
-            setTimeout(() => setIsElectrified(false), 1000);
-          }
-        })
-        .subscribe((status) => {
-          if (status === 'CLOSED') {
-             console.log("Reconnecting portal...");
-          }
-        });
-    }
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-        channelRef.current = null;
-      }
-    };
-  }, [postId, initialReactions]);
-
+  
+  // Usamos o initialReactions vindo do pai para evitar loops de estado interno
   const counts = useMemo(() => ({
-    zap: liveReactions.filter((r: any) => r.type === 'zap').length,
-    mic: liveReactions.filter((r: any) => r.type === 'mic').length,
-    heart: liveReactions.filter((r: any) => r.type === 'heart').length,
-  }), [liveReactions]);
+    zap: (initialReactions || []).filter((r: any) => r.type === 'zap').length,
+    mic: (initialReactions || []).filter((r: any) => r.type === 'mic').length,
+    heart: (initialReactions || []).filter((r: any) => r.type === 'heart').length,
+  }), [initialReactions]);
+
+  // Efeito de choque visual disparado pelo contador de Zaps
+  useEffect(() => {
+    if (counts.zap > 0) {
+      setIsElectrified(true);
+      const timer = setTimeout(() => setIsElectrified(false), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [counts.zap]);
 
   const handleSignal = async (e: React.MouseEvent, type: 'zap' | 'heart' | 'mic') => {
     e.preventDefault();
@@ -63,7 +37,9 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
       if (!user) return;
       if (type === 'heart') setLiked(true);
 
+      // Inserção simples. O refresh do pai cuidará de atualizar o feed sem travar o socket.
       await supabase.from('post_reactions').insert([{ post_id: postId, user_id: user.id, type }]);
+      
       if (onRefresh) onRefresh(); 
     } catch (err) {
       console.error("Erro no sinal:", err);
@@ -77,15 +53,11 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ 
-              opacity: [0.3, 0.7, 0.3], // Reduzi a opacidade para aliviar a GPU
-              boxShadow: [
-                "0 0 10px #ffdf00",
-                "0 0 20px #ffdf00",
-                "0 0 10px #ffdf00"
-              ]
+              opacity: [0.2, 0.5, 0.2], // Opacidade bem baixa para não matar a GPU
+              boxShadow: ["0 0 8px #ffdf00", "0 0 15px #ffdf00", "0 0 8px #ffdf00"]
             }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1, repeat: Infinity }}
+            transition={{ duration: 1.5, repeat: Infinity }}
             style={styles.lightningBorder}
           />
         )}
@@ -114,10 +86,7 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 
         <div style={styles.divider} />
 
-        <button 
-          onClick={(e) => { e.stopPropagation(); onOpenThread(); }} 
-          style={styles.balloonBtn}
-        >
+        <button onClick={(e) => { e.stopPropagation(); onOpenThread(); }} style={styles.balloonBtn}>
           <span style={styles.balloonEmoji}>🗯️</span>
         </button>
       </div>
@@ -128,12 +97,7 @@ export default function ReactionBar({ postId, initialReactions, onOpenThread, on
 const styles = {
   pillContainer: { position: "relative" as const, display: "flex", alignItems: "center" },
   lightningBorder: { position: "absolute" as const, inset: -3, borderRadius: "100px", border: "1.5px solid #ffdf00", pointerEvents: "none" as const, zIndex: 0 },
-  pill: { 
-    display: "flex", alignItems: "center", padding: "4px 10px", 
-    background: "rgba(10, 10, 10, 0.98)", backdropFilter: "blur(10px)", 
-    borderRadius: "100px", border: "1px solid", gap: "6px",
-    position: "relative" as const, zIndex: 1
-  },
+  pill: { display: "flex", alignItems: "center", padding: "4px 10px", background: "#0a0a0a", borderRadius: "100px", border: "1px solid", gap: "6px", position: "relative" as const, zIndex: 1 },
   reactionGroup: { display: "flex", alignItems: "center", gap: "8px" },
   iconBtn: { background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "3px", padding: "2px" },
   emoji: { fontSize: "14px" },
