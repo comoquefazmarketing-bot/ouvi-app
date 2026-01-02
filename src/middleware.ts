@@ -3,17 +3,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
-
   const { pathname } = request.nextUrl
 
-  // 1. ZONA DE ESCAPE (Bypass Total)
-  // Adicionamos /onboarding aqui para o Middleware não interferir na sintonização
-  const isAuth = pathname.startsWith('/auth')
-  const isOnboarding = pathname.startsWith('/onboarding')
-  const isLogin = pathname === '/login'
-  const isStatic = pathname.match(/\.(png|jpg|ico|svg|json|js|css)$/)
-  
-  if (isAuth || isStatic || isOnboarding || isLogin) {
+  // BYPASS DEFINITIVO: Libera rotas de auth, onboarding e arquivos de sistema (SVG/Manifest)
+  if (
+    pathname.startsWith('/auth') || 
+    pathname.startsWith('/onboarding') || 
+    pathname.startsWith('/login') ||
+    pathname.includes('.') || 
+    pathname.startsWith('/_next')
+  ) {
     return response
   }
 
@@ -37,10 +36,8 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Busca o usuário apenas para proteger o Dashboard
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 2. PROTEÇÃO RESTRITA AO DASHBOARD
   if (!user && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }

@@ -6,10 +6,15 @@ export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   
-  if (code) {
-    const cookieStore = await cookies()
-    const response = NextResponse.redirect(`${origin}/onboarding`)
+  // Se houver erro na URL vindo do provedor, cancela o loop imediatamente
+  if (searchParams.get('error')) {
+    return NextResponse.redirect(`${origin}/login?error=auth_failed`)
+  }
 
+  const cookieStore = await cookies()
+  const response = NextResponse.redirect(`${origin}/onboarding`)
+
+  if (code) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -31,11 +36,11 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (!error) {
-      // Pequena pausa para sincronia de headers (evita o loop por velocidade) [cite: 2025-12-29]
+      // Delay de 100ms para garantir que a Vercel/Navegador processe os headers [cite: 2025-12-29]
       await new Promise((resolve) => setTimeout(resolve, 100));
       return response 
     }
   }
 
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`)
+  return NextResponse.redirect(`${origin}/login?error=session_error`)
 }
