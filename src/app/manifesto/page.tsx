@@ -2,31 +2,41 @@
  * PROJETO OUVI – Manifesto (Nível 1-B)
  * Local: src/app/manifesto/page.tsx
  * Autor: Felipe Makarios
- * Funcionalidade: Captura de Leads via Supabase
+ * Funcionalidade: Captura de Leads e Redirecionamento Automático
  */
 
 "use client";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function ManifestoPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"ocioso" | "sintonizando" | "sucesso" | "erro">("ocioso");
 
+  // PORTAL AUTOMÁTICO: Se o Luciano (ou qualquer membro) já estiver logado, pula a landing
+  useEffect(() => {
+    const verificarSintonia = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push("/dashboard");
+      }
+    };
+    verificarSintonia();
+  }, [router]);
+
   const entrarNaFila = async () => {
     if (!email || !email.includes("@")) return;
-    
     setStatus("sintonizando");
 
     try {
-      // Grava o e-mail na tabela waitlist que criamos
       const { error } = await supabase
         .from('waitlist')
         .insert([{ email: email.toLowerCase() }]);
 
       if (error) throw error;
-      
       setStatus("sucesso");
     } catch (err) {
       console.error("Erro na sintonização:", err);
@@ -61,15 +71,15 @@ export default function ManifestoPage() {
           
           <div style={styles.paragraphs}>
             <p style={styles.p}>
-              O mundo digital perdeu a voz entre bilhões de imagens vazias [cite: 2025-12-30]. 
-              Aqui, a frequência é outra [cite: 2026-01-01].
+              O mundo digital perdeu a voz entre bilhões de imagens vazias. 
+              Aqui, a frequência é outra [cite: 2025-12-30, 2026-01-01].
             </p>
             <p style={styles.p}>
               Não buscamos atenção, buscamos presença. 
               O microfone é o nosso altar e a sua voz é a única chave [cite: 2025-12-30].
             </p>
             <p style={styles.goldText}>
-              Sintonias limitadas. Apenas por convite.
+              SINTONIAS LIMITADAS. APENAS POR CONVITE.
             </p>
           </div>
         </section>
@@ -96,6 +106,7 @@ export default function ManifestoPage() {
                   style={styles.input}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && entrarNaFila()}
                   disabled={status === "sintonizando"}
                 />
                 <motion.button 
@@ -108,7 +119,7 @@ export default function ManifestoPage() {
                   {status === "sintonizando" ? "SINTONIZANDO..." : "ENTRAR NA FILA"}
                 </motion.button>
                 {status === "erro" && (
-                  <p style={styles.errorMsg}>Sinal já registrado ou inválido.</p>
+                  <p style={styles.errorMsg}>Sinal já registrado ou frequência instável.</p>
                 )}
               </motion.div>
             )}
