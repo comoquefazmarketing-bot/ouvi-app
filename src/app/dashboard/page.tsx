@@ -1,12 +1,11 @@
 ﻿"use client";
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
 import { notifyArrival } from './telegramService';
 import { motion } from 'framer-motion';
 
-// ID do Perfil Oficial do App para posts de sistema
 const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000"; 
 
 export default function DashboardPage() {
@@ -17,9 +16,12 @@ export default function DashboardPage() {
   const [myInvites, setMyInvites] = useState<any[]>([]);
   const [showTelegramBanner, setShowTelegramBanner] = useState(false);
 
-  // Canais de Sintonia
   const TELEGRAM_LINK = "https://t.me/+vMOnG-2fI_E4ZTRh";
   const SUPPORT_BOT_LINK = "https://t.me/ouvi_maestro_bot";
+
+  const availableInvites = useMemo(() => {
+    return myInvites.slice(0, 2);
+  }, [myInvites]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -70,7 +72,6 @@ export default function DashboardPage() {
           video_url: post.video_url || "",
           content_audio: post.content_audio || "",
           profiles: userProfile,
-          profile: userProfile,
           audio_comments: (commentsData || []).filter(c => c.post_id === post.id).map(c => ({
             ...c,
             profiles: allProfiles?.find(p => p.id === c.user_id)
@@ -88,6 +89,15 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  const handleCopyInvite = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      alert("SINAL COPIADO. USE COM SABEDORIA.");
+    } catch (err) {
+      console.error("Falha ao copiar sinal", err);
+    }
+  };
+
   const handleJoinTelegram = () => {
     localStorage.setItem('ouvi_joined_telegram', 'true');
     setShowTelegramBanner(false);
@@ -97,38 +107,21 @@ export default function DashboardPage() {
   return (
     <div className="dashboard-root">
       <style jsx global>{`
-        html, body {
-          max-width: 100vw;
-          overflow-x: hidden;
-          background-color: #000;
-          margin: 0;
-          padding: 0;
-        }
-        .dashboard-root {
-          background-color: #000;
-          min-height: 100vh;
-          padding-bottom: 140px;
-          width: 100%;
-          overflow-x: hidden;
-        }
-        .content-container {
-          max-width: 500px;
-          margin: 0 auto;
-          padding: 10px;
-          width: 100%;
-          box-sizing: border-box;
-        }
-        .system-post-aura {
-          border: 1px solid rgba(0, 242, 254, 0.3);
-          border-radius: 16px;
-          margin-bottom: 20px;
-          background: linear-gradient(180deg, rgba(0, 242, 254, 0.05) 0%, rgba(0, 0, 0, 0) 100%);
+        html, body { max-width: 100vw; overflow-x: hidden; background-color: #000; margin: 0; padding: 0; }
+        .dashboard-root { background-color: #000; min-height: 100vh; padding-bottom: 140px; width: 100%; overflow-x: hidden; }
+        .content-container { max-width: 500px; margin: 0 auto; padding: 10px; width: 100%; box-sizing: border-box; }
+        .system-post-aura { 
+          border: 1px solid rgba(0, 242, 254, 0.3); 
+          border-radius: 28px; 
+          margin-bottom: 25px; 
+          background: linear-gradient(180deg, rgba(0, 242, 254, 0.05) 0%, rgba(0, 0, 0, 0) 100%); 
         }
       `}</style>
 
       <div className="content-container">
+        {/* HEADER LIMPO: Apenas o QG SINTONIA à direita, sem o OUVI à esquerda */}
         <header style={styles.header}>
-          <h1 style={styles.brand}>OUVI</h1>
+          <div style={{ flex: 1 }}></div> {/* Espaçador para manter o QG à direita */}
           
           {showTelegramBanner && (
             <motion.button 
@@ -138,17 +131,27 @@ export default function DashboardPage() {
               transition={{ duration: 2, repeat: Infinity }}
             >
               <span style={styles.socialText}>QG SINTONIA</span>
-              <span style={{fontSize: '12px'}}>🎙️</span>
             </motion.button>
           )}
         </header>
 
-        {myInvites.length > 0 && (
+        {/* DISPLAY VIVO DE CONVITES */}
+        {availableInvites.length > 0 && (
           <div style={styles.inviteContainer}>
-            <p style={styles.inviteTitle}>🎫 {myInvites.length} ACESSOS EXCLUSIVOS DISPONÍVEIS</p>
+            <p style={styles.inviteTitle}>
+              <motion.span animate={{ opacity: [0.4, 1, 0.4] }} transition={{ repeat: Infinity, duration: 2 }}>●</motion.span> 
+              {myInvites.length} ACESSOS EXCLUSIVOS DISPONÍVEIS
+            </p>
             <div style={styles.inviteList}>
-              {myInvites.map((inv) => (
-                <span key={inv.code} style={styles.inviteCode}>{inv.code}</span>
+              {availableInvites.map((inv) => (
+                <motion.button 
+                  key={inv.code} 
+                  onClick={() => handleCopyInvite(inv.code)}
+                  whileTap={{ scale: 0.95 }}
+                  style={styles.inviteCode}
+                >
+                  {inv.code}
+                </motion.button>
               ))}
             </div>
             <p style={styles.inviteFooter}>USE COM SABEDORIA. O SINAL É ESCASSO.</p>
@@ -163,20 +166,18 @@ export default function DashboardPage() {
             <PostCard 
               post={post} 
               onOpenThread={() => setSelectedPost(post)}
-              currentUserId={currentUser?.id} 
-              onDelete={(id: string) => setPosts(prev => prev.filter(p => p.id !== id))}
+              onRefresh={fetchData}
             />
           </div>
         ))}
       </div>
 
-      {/* BOTÃO SUPORTE EXPERT - Mistério e Ajuda */}
       <motion.a
         href={SUPPORT_BOT_LINK}
         target="_blank"
         rel="noopener noreferrer"
         style={styles.supportBtn}
-        whileHover={{ scale: 1.05, backgroundColor: "rgba(255, 255, 255, 0.05)", borderColor: "rgba(255, 255, 255, 0.2)" }}
+        whileHover={{ scale: 1.05, backgroundColor: "rgba(10, 10, 10, 0.95)" }}
         whileTap={{ scale: 0.95 }}
       >
         <span style={styles.supportText}>SUPORTE EXPERT / IA</span>
@@ -194,43 +195,16 @@ export default function DashboardPage() {
 }
 
 const styles = {
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', padding: '15px 5px' },
-  brand: { color: '#fff', fontSize: '24px', fontWeight: '900' as const, letterSpacing: '6px', margin: 0 },
-  socialButton: {
-    background: 'rgba(0, 242, 254, 0.1)',
-    border: '1px solid #00f2fe',
-    borderRadius: '100px',
-    padding: '8px 16px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  socialText: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, letterSpacing: '2px' },
+  header: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '40px', padding: '20px 5px' },
+  socialButton: { background: 'rgba(0, 242, 254, 0.05)', border: '1px solid rgba(0, 242, 254, 0.3)', borderRadius: '100px', padding: '8px 16px', cursor: 'pointer' },
+  socialText: { color: '#00f2fe', fontSize: '8px', fontWeight: '900' as const, letterSpacing: '2px' },
   loadingText: { color: '#00f2fe', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px', opacity: 0.5 },
   emptyText: { color: '#222', textAlign: 'center' as const, marginTop: '80px', fontWeight: '900' as const, fontSize: '10px', letterSpacing: '2px' },
-  inviteContainer: { backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(0, 242, 254, 0.1)', padding: '25px', borderRadius: '20px', marginBottom: '30px', textAlign: 'center' as const },
-  inviteTitle: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, marginBottom: '15px', letterSpacing: '2px', opacity: 0.8 },
-  inviteList: { display: 'flex', justifyContent: 'center', gap: '10px', flexWrap: 'wrap' as const },
-  inviteCode: { border: '1px solid #00f2fe', color: '#00f2fe', padding: '6px 12px', fontSize: '12px', fontWeight: '900' as const, borderRadius: '8px', background: 'rgba(0, 242, 254, 0.05)' },
-  inviteFooter: { color: '#333', fontSize: '8px', marginTop: '15px', fontWeight: '900' as const, letterSpacing: '1px' },
-  supportBtn: {
-    position: "fixed" as const,
-    bottom: "30px",
-    right: "30px",
-    padding: "12px 20px",
-    background: "rgba(0, 0, 0, 0.8)",
-    border: "1px solid rgba(255, 255, 255, 0.05)",
-    borderRadius: "14px",
-    textDecoration: "none",
-    zIndex: 100,
-    backdropFilter: "blur(10px)",
-    transition: "all 0.4s ease",
-  },
-  supportText: {
-    color: "#444", 
-    fontSize: "8px",
-    fontWeight: "900" as const,
-    letterSpacing: "2px",
-  }
+  inviteContainer: { backgroundColor: 'rgba(255, 255, 255, 0.01)', border: '1px solid rgba(0, 242, 254, 0.1)', padding: '30px', borderRadius: '28px', marginBottom: '35px', textAlign: 'center' as const },
+  inviteTitle: { color: '#00f2fe', fontSize: '9px', fontWeight: '900' as const, marginBottom: '20px', letterSpacing: '2px', opacity: 0.7 },
+  inviteList: { display: 'flex', justifyContent: 'center', gap: '12px' },
+  inviteCode: { border: '1px solid rgba(0, 242, 254, 0.4)', color: '#fff', padding: '10px 18px', fontSize: '11px', fontWeight: '900' as const, borderRadius: '12px', background: 'rgba(0, 0, 0, 0.6)', cursor: 'pointer' },
+  inviteFooter: { color: '#333', fontSize: '8px', marginTop: '20px', fontWeight: '900' as const, letterSpacing: '1px' },
+  supportBtn: { position: "fixed" as const, bottom: "100px", right: "20px", padding: "10px 16px", background: "rgba(10, 10, 10, 0.8)", border: "1px solid rgba(255, 255, 255, 0.1)", borderRadius: "12px", textDecoration: "none", zIndex: 9999, backdropFilter: "blur(15px)" },
+  supportText: { color: "#666", fontSize: "7px", fontWeight: "900" as const, letterSpacing: "2px" }
 };
