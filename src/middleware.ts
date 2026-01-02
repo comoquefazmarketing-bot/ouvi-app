@@ -1,6 +1,6 @@
 ﻿/**
- * PROJETO OUVI €” Middleware de Teste (Acesso Liberado)
- * Autor: Felipe Makarios
+ * PROJETO OUVI – Middleware de Segurança (Sequência Ativada)
+ * Local: src/middleware.ts
  */
 
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
@@ -39,19 +39,32 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // --- MODO DE TESTE LIBERADO ---
-  // Comentei as travas para vocª navegar livremente entre as telas.
-  
-  /* const { data: { user } } = await supabase.auth.getUser()
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  // 1. Recupera o usuário atual
+  const { data: { user } } = await supabase.auth.getUser()
+  const url = request.nextUrl.clone()
+
+  // 2. BLOQUEIO DE SEGURANÇA: Se não estiver logado, não entra no Dash nem no Onboarding [cite: 2025-12-30]
+  if (!user && (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/onboarding'))) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
-  */
+
+  // 3. REGRA SENSORIAL: Se logado, garante que passou pelo Onboarding antes do Feed [cite: 2026-01-01]
+  if (user && url.pathname.startsWith('/dashboard')) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('onboarding_completed')
+      .eq('id', user.id)
+      .single()
+
+    if (profile && !profile.onboarding_completed) {
+      return NextResponse.redirect(new URL('/onboarding', request.url))
+    }
+  }
 
   return response
 }
 
 export const config = {
-  // Mantemos o matcher vazio ou apenas com rotas que n£o vamos testar agora
-  matcher: ['/coloque_aqui_algo_que_nao_existe'],
+  // ATIVADO: Agora o middleware vigia as rotas centrais do app [cite: 2025-12-30]
+  matcher: ['/dashboard/:path*', '/onboarding/:path*'],
 }
