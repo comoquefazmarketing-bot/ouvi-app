@@ -4,11 +4,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request: { headers: request.headers } })
 
-  // 1. ISOLAMENTO TOTAL: Bypass para auth e arquivos estáticos (Evita Loops)
-  const isAuth = request.nextUrl.pathname.startsWith('/auth')
-  const isStatic = request.nextUrl.pathname.match(/\.(png|jpg|ico|svg|json|js|css)$/)
+  const { pathname } = request.nextUrl
+
+  // 1. ZONA DE ESCAPE (Bypass Total)
+  // Adicionamos /onboarding aqui para o Middleware não interferir na sintonização
+  const isAuth = pathname.startsWith('/auth')
+  const isOnboarding = pathname.startsWith('/onboarding')
+  const isLogin = pathname === '/login'
+  const isStatic = pathname.match(/\.(png|jpg|ico|svg|json|js|css)$/)
   
-  if (isAuth || isStatic) {
+  if (isAuth || isStatic || isOnboarding || isLogin) {
     return response
   }
 
@@ -32,27 +37,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Busca o usuário atual de forma segura
+  // Busca o usuário apenas para proteger o Dashboard
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isLoginPath = request.nextUrl.pathname === '/login'
-  const isOnboardingPath = request.nextUrl.pathname === '/onboarding'
-  const isProtectedRoute = request.nextUrl.pathname.startsWith('/dashboard') || isOnboardingPath
-
-  // 2. REDIRECIONAMENTOS INTELIGENTES
-  
-  // Caso 1: Não logado tentando acessar área restrita -> Login
-  if (!user && isProtectedRoute) {
+  // 2. PROTEÇÃO RESTRITA AO DASHBOARD
+  if (!user && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
-
-  // Caso 2: Logado no Login -> Vai para Onboarding (triagem)
-  if (user && isLoginPath) {
-    return NextResponse.redirect(new URL('/onboarding', request.url))
-  }
-
-  // Nota: O próprio Onboarding decidirá se manda para o Dashboard 
-  // baseado no perfil salvo no banco, como fizemos no código anterior.
 
   return response
 }
