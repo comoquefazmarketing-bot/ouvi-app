@@ -5,16 +5,12 @@ import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
-/**
- * PROJETO OUVI – Sintonização com Delay Sensorial [cite: 2026-01-01]
- */
 const playSensorialSound = () => {
   if (typeof window === "undefined") return;
   try {
     const context = new (window.AudioContext || (window as any).webkitAudioContext)();
     const startTime = context.currentTime;
 
-    // Configuração do Eco (Delay) [cite: 2026-01-01]
     const delay = context.createDelay();
     delay.delayTime.value = 0.25; 
     const feedback = context.createGain();
@@ -40,13 +36,11 @@ const playSensorialSound = () => {
       gain.gain.exponentialRampToValueAtTime(0.001, time + 0.08);
       osc.connect(gain);
       gain.connect(context.destination);
-      gain.connect(delay); // Alimenta o efeito de eco
+      gain.connect(delay); 
       osc.start(time);
       osc.stop(time + 0.1);
     }
-  } catch (e) {
-    console.warn("Frequência de áudio bloqueada.");
-  }
+  } catch (e) { console.warn("Áudio bloqueado."); }
 };
 
 function LoginContent() {
@@ -63,8 +57,12 @@ function LoginContent() {
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: { 
-          redirectTo: `${window.location.origin}/auth/callback`, // [cite: 2025-12-30]
-          queryParams: { access_type: 'offline', prompt: 'consent' },
+          redirectTo: `${window.location.origin}/auth/callback`,
+          skipBrowserRedirect: false,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          }
         },
       });
       if (error) throw error;
