@@ -2,9 +2,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: { headers: request.headers },
-  })
+  let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -27,21 +25,15 @@ export async function middleware(request: NextRequest) {
   )
 
   const { data: { session } } = await supabase.auth.getSession()
-  const url = request.nextUrl.clone()
 
-  // 1. Proteção: Se não houver sessão e tentar acessar Dash ou Onboarding, vai para Login
-  if (!session && (url.pathname.startsWith('/dashboard') || url.pathname.startsWith('/onboarding'))) {
+  // Se não estiver logado e tentar entrar no app, vai para o login
+  if (!session && (request.nextUrl.pathname.startsWith('/dashboard') || request.nextUrl.pathname.startsWith('/onboarding'))) {
     return NextResponse.redirect(new URL('/login', request.url))
-  }
-
-  // 2. Fluxo: Se já estiver logado e for para o Login, manda para o Dashboard
-  if (session && url.pathname === '/login') {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/onboarding/:path*', '/login'],
+  matcher: ['/dashboard/:path*', '/onboarding/:path*'],
 }

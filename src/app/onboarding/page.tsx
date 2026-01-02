@@ -23,6 +23,8 @@ export default function OnboardingPage() {
   const handleFinish = async () => {
     if (!userId || nickname.length < 3) return;
     setLoading(true);
+
+    // Salva o perfil e marca como sintonizado
     const { error } = await supabase.from("profiles").upsert({
       id: userId,
       username: nickname.trim().toLowerCase(),
@@ -30,27 +32,32 @@ export default function OnboardingPage() {
       updated_at: new Date()
     });
 
-    if (!error) router.push("/dashboard");
-    else { alert("Erro na sintonização."); setLoading(false); }
+    if (!error) {
+      router.push("/dashboard");
+    } else {
+      console.error(error);
+      alert("Erro na sintonização. Tente outro nome.");
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ background: "#000", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: "center" }}>
-        <h2 style={{ color: "#fff", letterSpacing: "4px", fontSize: "12px" }}>NOME DE SINAL</h2>
+    <div style={{ background: "#000", height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff" }}>
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} style={{ textAlign: "center", maxWidth: "300px" }}>
+        <h2 style={{ letterSpacing: "4px", fontSize: "10px", opacity: 0.6 }}>SINAL DE IDENTIFICAÇÃO</h2>
         <input 
-          style={{ background: "none", borderBottom: "1px solid #00f2fe", color: "#fff", textAlign: "center", padding: "10px", marginTop: "20px", outline: "none" }}
+          autoFocus
+          style={{ background: "none", border: "none", borderBottom: "1px solid #00f2fe", color: "#fff", textAlign: "center", padding: "10px", marginTop: "20px", outline: "none", width: "100%", fontSize: "18px" }}
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
           placeholder="seu_nome"
         />
-        <br />
         <button 
           onClick={handleFinish}
-          disabled={loading}
-          style={{ marginTop: "40px", background: "#00f2fe", border: "none", padding: "10px 30px", borderRadius: "20px", fontWeight: "bold", cursor: "pointer" }}
+          disabled={loading || nickname.length < 3}
+          style={{ marginTop: "50px", background: nickname.length >= 3 ? "#00f2fe" : "#222", color: "#000", border: "none", padding: "15px 40px", borderRadius: "30px", fontWeight: "900", cursor: "pointer", transition: "0.3s" }}
         >
-          {loading ? "SINTONIZANDO..." : "ENTRAR"}
+          {loading ? "SINTONIZANDO..." : "CONFIRMAR SINTONIA"}
         </button>
       </motion.div>
     </div>

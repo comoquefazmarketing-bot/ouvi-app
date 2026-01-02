@@ -7,15 +7,13 @@ export async function GET(request: Request) {
   const code = searchParams.get('code')
 
   if (code) {
-    const cookieStore = cookies()
+    const cookieStore = await cookies() // Ajuste assíncrono essencial
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) {
-            return cookieStore.get(name)?.value
-          },
+          get(name: string) { return cookieStore.get(name)?.value },
           set(name: string, value: string, options: CookieOptions) {
             cookieStore.set({ name, value, ...options })
           },
@@ -26,10 +24,13 @@ export async function GET(request: Request) {
       }
     )
     
-    // Troca o código pela sesso real
-    await supabase.auth.exchangeCodeForSession(code)
+    // Troca o sinal pelo acesso real
+    const { error } = await supabase.auth.exchangeCodeForSession(code)
+    if (!error) {
+      return NextResponse.redirect(`${origin}/onboarding`)
+    }
   }
 
-  // Redireciona para o onboarding que você criou
-  return NextResponse.redirect(`${origin}/onboarding`)
+  // Se falhar, volta para o login para não travar em tela branca
+  return NextResponse.redirect(`${origin}/login?error=auth_failed`)
 }
