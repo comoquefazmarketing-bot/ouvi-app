@@ -1,11 +1,11 @@
 ﻿import { createClient } from '@supabase/supabase-js';
 
-// As variáveis devem estar sem espaços extras na Vercel
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("ERRO: Variáveis do Supabase não configuradas no ambiente!");
+  // Isso te avisa no console se a Vercel não ler as chaves
+  console.error("ERRO: Frequência do Supabase não encontrada!");
 }
 
 export const supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
@@ -13,15 +13,8 @@ export const supabase = createClient(supabaseUrl!, supabaseAnonKey!, {
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
-    // Com as Origens JavaScript salvas, voltamos para o padrão seguro PKCE
-    flowType: 'pkce', 
-    storageKey: 'ouvi-auth-v1',
-    cookieOptions: {
-      name: 'ouvi-token',
-      lifetime: 60 * 60 * 24 * 7, // 7 dias de sessão
-      domain: 'ouvi.ia.br',
-      path: '/',
-      sameSite: 'lax',
-    }
+    flowType: 'pkce', // O padrão mais seguro para o Next.js 15
+    storageKey: 'ouvi-session-v1'
+    // Removi as 'cookieOptions' manuais para o Supabase usar o padrão estável dele
   }
 });
