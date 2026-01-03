@@ -1,5 +1,6 @@
 ﻿"use client";
 import React, { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
@@ -8,12 +9,23 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const router = useRouter();
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       
-      // Busca apenas os posts - Sem travas de convite [cite: 2025-12-30]
+      // 1. Identificação de Identidade (Híbrida) [cite: 2025-12-30]
+      const { data: { user } } = await supabase.auth.getUser();
+      const manualId = localStorage.getItem("ouvi_session_id");
+      
+      if (!user && !manualId) {
+        router.push("/login");
+        return;
+      }
+
+      // 2. Busca de Posts sem travas de invites
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*, profiles(id, username, avatar_url)')
@@ -27,26 +39,47 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', padding: '20px' }}>
+    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', padding: '20px', color: '#fff' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-        <header style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <img src="/logo-dashboard.svg" style={{ width: '100px' }} alt="OUVI" />
+        <header style={{ textAlign: 'center', marginBottom: '40px', paddingTop: '20px' }}>
+          <h1 style={{ fontSize: '24px', fontWeight: '900', letterSpacing: '8px', fontStyle: 'italic' }}>OUVI</h1>
         </header>
 
         {loading ? (
-          <p style={{ color: '#00f2fe', textAlign: 'center', opacity: 0.5 }}>SINTONIZANDO...</p>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px', gap: '20px' }}>
+            <div style={{ width: '30px', height: '30px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            <p style={{ color: '#fff', textAlign: 'center', opacity: 0.3, fontSize: '10px', letterSpacing: '4px' }}>SINTONIZANDO...</p>
+          </div>
         ) : (
-          posts.map((post) => (
-            <PostCard key={post.id} post={post} onOpenThread={() => setSelectedPost(post)} onRefresh={fetchData} />
-          ))
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {posts.map((post) => (
+              <PostCard 
+                key={post.id} 
+                post={post} 
+                onOpenThread={() => setSelectedPost(post)} 
+                onRefresh={fetchData} 
+              />
+            ))}
+          </div>
         )}
       </div>
-      {selectedPost && <ThreadDrawer post={selectedPost} onClose={() => setSelectedPost(null)} onRefresh={fetchData} />}
+
+      <style jsx>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
+
+      {selectedPost && (
+        <ThreadDrawer 
+          post={selectedPost} 
+          onClose={() => setSelectedPost(null)} 
+          onRefresh={fetchData} 
+        />
+      )}
     </div>
   );
 }

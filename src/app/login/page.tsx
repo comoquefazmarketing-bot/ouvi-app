@@ -1,7 +1,8 @@
 ﻿"use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const ImmersiveBackground = () => {
@@ -42,85 +43,101 @@ const ImmersiveBackground = () => {
 };
 
 export default function LoginPage() {
-  
-  // Som sintetizado: "Tum Dum" (A pulsação do OUVI)
+  const [formData, setFormData] = useState({ nome: "", email: "", whats: "" });
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
   const playTumDum = () => {
     if (typeof window === "undefined") return;
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    
     const createBeat = (freq: number, volume: number, start: number, duration: number, isDum: boolean) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, start);
-      
-      if (isDum) {
-        osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + duration);
-      }
-
+      if (isDum) osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + duration);
       gain.gain.setValueAtTime(volume, start);
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
-      
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      
       osc.start(start);
       osc.stop(start + duration);
     };
-
     createBeat(150, 0.4, audioCtx.currentTime, 0.15, false);
     createBeat(90, 0.7, audioCtx.currentTime + 0.15, 0.5, true); 
   };
 
-  const handleLogin = async (provider: 'google' | 'tiktok' | 'instagram') => {
+  const handleAcessoDireto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
     playTumDum();
 
-    // Pequeno delay para a percepção sensorial do som
-    setTimeout(async () => {
-      try {
-        // Captura a origem exata (evita erro de mismatch entre ouvi.ia.br e www.ouvi.ia.br)
-        const origin = window.location.origin;
-        
-        const { error } = await supabase.auth.signInWithOAuth({
-          provider: provider as any,
-          options: {
-            // Sintonização dinâmica do redirect
-            redirectTo: `${origin}/auth/callback`,
-            queryParams: {
-              access_type: 'offline',
-              prompt: 'consent',
-            },
-          },
-        });
-        if (error) throw error;
-      } catch (error) {
-        console.error("Erro na sintonização de login:", error);
-      }
-    }, 250);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .upsert({ 
+          email: formData.email, 
+          username: formData.nome, 
+          whatsapp: formData.whats,
+          welcome_sent: true 
+        }, { onConflict: 'email' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      localStorage.setItem("ouvi_session_id", data.id);
+      localStorage.setItem("ouvi_user_name", data.username);
+
+      setTimeout(() => router.push("/dashboard"), 800);
+    } catch (err) {
+      console.error("Erro na sintonização:", err);
+      alert("Falha na sintonização do sinal.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div style={styles.container}>
       <ImmersiveBackground />
       <div style={styles.content}>
-        <motion.img 
-          src="/logo-ouvi.svg" 
-          alt="OUVI"
-          style={styles.logoMaster}
-          animate={{ scale: [1, 1.05, 1] }}
+        <motion.h1 
+          style={styles.logoText}
+          animate={{ opacity: [0.3, 1, 0.3] }}
           transition={{ duration: 4, repeat: Infinity }}
-        />
+        >OUVI</motion.h1>
         <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
+        
+        <form onSubmit={handleAcessoDireto} style={styles.form}>
+          <input 
+            type="text" placeholder="NOME" required style={styles.input}
+            onChange={(e) => setFormData({...formData, nome: e.target.value})}
+          />
+          <input 
+            type="email" placeholder="E-MAIL" required style={styles.input}
+            onChange={(e) => setFormData({...formData, email: e.target.value})}
+          />
+          <input 
+            type="tel" placeholder="WHATSAPP" required style={styles.input}
+            onChange={(e) => setFormData({...formData, whats: e.target.value})}
+          />
+          <button disabled={loading} style={styles.mainBtn}>
+            {loading ? "SINTONIZANDO..." : "ENTRAR NO SINAL"}
+          </button>
+        </form>
+
+        <div style={styles.divider}>OU</div>
+
         <div style={styles.buttonGroup}>
-          <motion.button
-            onClick={() => handleLogin('google')}
-            style={styles.premiumBtn}
-            whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <span style={styles.btnText}>GOOGLE ACCESS</span>
-          </motion.button>
+          <div style={styles.disabledBtn}>
+            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" style={styles.icon} alt="" />
+            <span style={styles.btnText}>GOOGLE (BREVE)</span>
+          </div>
+          <div style={styles.disabledBtn}>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" style={{...styles.icon, filter: 'invert(1)'}} alt="" />
+            <span style={styles.btnText}>APPLE ID (BREVE)</span>
+          </div>
         </div>
       </div>
     </div>
@@ -128,13 +145,18 @@ export default function LoginPage() {
 }
 
 const styles = {
-  container: { background: "#000", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as "relative" },
-  grainContainer: { position: "absolute" as "absolute", width: "100%", height: "100%", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1 },
+  container: { background: "#000", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as "relative", color: "#fff" },
+  grainContainer: { position: "absolute" as "absolute", width: "100%", height: "100%", zIndex: 1 },
   grain: { position: "absolute" as "absolute", background: "#00f2fe", borderRadius: "50%", boxShadow: "0 0 10px rgba(0, 242, 254, 0.8)" },
-  content: { width: "100%", maxWidth: "500px", display: "flex", flexDirection: "column" as "column", alignItems: "center", zIndex: 10 },
-  logoMaster: { width: "160px", height: "auto", marginBottom: "15px" },
-  tagline: { color: "#fff", fontSize: "10px", fontWeight: "900", letterSpacing: "10px", marginBottom: "60px", opacity: 0.3 },
-  buttonGroup: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "16px", padding: "0 60px" },
-  premiumBtn: { background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "16px", borderRadius: "20px", cursor: "pointer", backdropFilter: "blur(20px)", display: "flex", justifyContent: "center", color: "#fff", outline: "none" },
-  btnText: { fontSize: "11px", fontWeight: "800", letterSpacing: "2px" }
+  content: { width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column" as "column", alignItems: "center", zIndex: 10, padding: "0 40px" },
+  logoText: { fontSize: "42px", fontWeight: "900", letterSpacing: "12px", marginBottom: "10px", fontStyle: "italic" },
+  tagline: { fontSize: "9px", fontWeight: "900", letterSpacing: "6px", marginBottom: "40px", opacity: 0.3 },
+  form: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px" },
+  input: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", padding: "16px", borderRadius: "18px", color: "#fff", fontSize: "11px", letterSpacing: "2px", outline: "none" },
+  mainBtn: { background: "#fff", color: "#000", border: "none", padding: "18px", borderRadius: "18px", fontWeight: "900", fontSize: "10px", letterSpacing: "3px", cursor: "pointer", marginTop: "10px" },
+  divider: { margin: "20px 0", fontSize: "10px", opacity: 0.2, letterSpacing: "4px" },
+  buttonGroup: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px", opacity: 0.2 },
+  disabledBtn: { background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "14px", borderRadius: "18px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
+  icon: { width: "16px", height: "16px" },
+  btnText: { fontSize: "9px", fontWeight: "800", letterSpacing: "2px" }
 };
