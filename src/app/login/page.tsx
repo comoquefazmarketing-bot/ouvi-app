@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -42,27 +42,61 @@ const ImmersiveBackground = () => {
 };
 
 export default function LoginPage() {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
+  
+  // Função que reconstrói o som com o "Dum" mais presente
+  const playTumDum = () => {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    const createBeat = (freq: number, volume: number, start: number, duration: number, isDum: boolean) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+      
+      // O segredo do Dum: rampa de frequência para dar peso
+      if (isDum) {
+        osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + duration);
+      }
 
-  useEffect(() => {
-    audioRef.current = new Audio("/sounds/tum-dum.mp3");
-  }, []);
+      gain.gain.setValueAtTime(volume, start);
+      // Sustentação maior para o Dum não sumir
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+
+    // "Tum" - Rápido e seco
+    createBeat(150, 0.4, audioCtx.currentTime, 0.15, false);
+    
+    // "Dum" - Frequência mais baixa, maior volume e maior duração
+    // Começa 150ms depois para simular o coração
+    createBeat(90, 0.7, audioCtx.currentTime + 0.15, 0.5, true); 
+  };
 
   const handleLogin = async (provider: 'google' | 'tiktok' | 'instagram') => {
-    // Experiência Sensorial: Toca o Tum Dum antes de sair
-    audioRef.current?.play().catch(() => {});
+    // Toca o som sintetizado reforçado
+    playTumDum();
 
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider as any,
-        options: {
-          redirectTo: `https://ouvi.ia.br/auth/callback`,
-        },
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error("Erro ao logar:", error);
-    }
+    // Pequeno delay para o usuário sentir o som antes do redirecionamento
+    setTimeout(async () => {
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: provider as any,
+          options: {
+            // Garante que o redirecionamento aponte para o callback que blindamos
+            redirectTo: `https://ouvi.ia.br/auth/callback`,
+          },
+        });
+        if (error) throw error;
+      } catch (error) {
+        console.error("Erro ao logar:", error);
+      }
+    }, 200);
   };
 
   return (
@@ -86,7 +120,6 @@ export default function LoginPage() {
           >
             <span style={styles.btnText}>GOOGLE ACCESS</span>
           </motion.button>
-          {/* Outros botões mantêm o padrão... */}
         </div>
       </div>
     </div>
