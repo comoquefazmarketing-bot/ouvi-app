@@ -1,26 +1,31 @@
 ﻿import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url)
+export async function GET(request: NextRequest) {
+  const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  // Forçamos o domínio oficial para blindar a sessão
-  const origin = 'https://ouvi.ia.br'
+  
+  // Forçamos o domínio oficial para blindar a sessão [cite: 2025-12-29]
+  const officialOrigin = 'https://ouvi.ia.br'
 
   if (code) {
-    const cookieStore = await cookies()
+    // Criamos a resposta ANTES para poder injetar os cookies nela [cite: 2025-12-29]
+    const response = NextResponse.next()
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          get(name: string) { return cookieStore.get(name)?.value },
+          get(name: string) { return request.cookies.get(name)?.value },
           set(name: string, value: string, options: CookieOptions) {
-            cookieStore.set({ name, value, ...options })
+            // Injetamos o cookie tanto na request quanto na response [cite: 2025-12-29]
+            request.cookies.set({ name, value, ...options })
+            response.cookies.set({ name, value, ...options })
           },
           remove(name: string, options: CookieOptions) {
-            cookieStore.delete({ name, ...options })
+            request.cookies.set({ name, value: '', ...options })
+            response.cookies.set({ name, value: '', ...options })
           },
         },
       }
@@ -30,29 +35,35 @@ export async function GET(request: Request) {
     const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && session?.user) {
-      // PAUSA TÁTICA: Essencial para estabilizar os cookies no navegador [cite: 2026-01-01]
-      await new Promise(resolve => setTimeout(resolve, 800));
-
+      // 1. Verificamos o perfil sem pressa [cite: 2026-01-01]
       const { data: profile } = await supabase
         .from('profiles')
         .select('onboarding_completed')
         .eq('id', session.user.id)
         .single()
 
-      // Se o perfil não existe ou o onboarding não foi feito, manda para /onboarding
+      let targetUrl = `${officialOrigin}/onboarding`
+
       if (!profile || !profile.onboarding_completed) {
+        // Upsert preventivo para garantir que o ID exista no banco [cite: 2025-12-29]
         await supabase.from('profiles').upsert({ 
           id: session.user.id,
           updated_at: new Date().toISOString()
         })
-        return NextResponse.redirect(`${origin}/onboarding`)
+      } else {
+        targetUrl = `${officialOrigin}/dashboard`
       }
 
-      // Usuário antigo e completo vai para o dashboard
-      return NextResponse.redirect(`${origin}/dashboard`)
+      // 2. REDIRECIONAMENTO FINAL: Criamos uma nova resposta de redirect 
+      // mas COPIAMOS os cookies que o Supabase injetou na nossa 'response' [cite: 2025-12-29]
+      const finalResponse = NextResponse.redirect(targetUrl)
+      response.cookies.getAll().forEach(cookie => {
+        finalResponse.cookies.set(cookie.name, cookie.value, cookie)
+      })
+      
+      return finalResponse
     }
   }
 
-  // Se o código falhar, volta para o login com aviso
-  return NextResponse.redirect(`${origin}/login?error=auth_failed`)
+  return NextResponse.redirect(`${officialOrigin}/login?error=auth_failed`)
 }
