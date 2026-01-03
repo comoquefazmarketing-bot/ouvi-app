@@ -2,13 +2,20 @@
 import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
+  // Criamos a resposta base
   let response = NextResponse.next({
     request: { headers: request.headers },
   })
 
-  // ISOLAMENTO: Não interceptar estas rotas para evitar loops de redirecionamento [cite: 2025-12-29]
-  const publicRoutes = ['/login', '/auth', '/onboarding']
-  if (publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+  // 1. ZONA LIVRE: Definimos rotas que o middleware NUNCA deve bloquear [cite: 2025-12-29]
+  // Adicionamos /onboarding aqui para que ele nunca te expulse dessa página
+  const bypassRoutes = ['/login', '/auth', '/onboarding', '/_next', '/favicon.ico']
+  
+  const isBypassRoute = bypassRoutes.some(route => 
+    request.nextUrl.pathname.startsWith(route)
+  )
+
+  if (isBypassRoute) {
     return response
   }
 
@@ -32,17 +39,18 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Verificamos o usuário apenas para rotas protegidas (como o dashboard) [cite: 2025-12-29]
   const { data: { user } } = await supabase.auth.getUser()
 
-  // Se não houver usuário e não for rota liberada, volta para o login
-  if (!user && !publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+  // 2. PROTEÇÃO DO DASHBOARD: Só redireciona se tentar entrar no dashboard sem estar logado
+  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
   return response
 }
 
-// CORREÇÃO AQUI: Adicionado o "=" que faltava [cite: 2025-12-28]
 export const config = {
+  // Mantemos o matcher para interceptar as rotas do app [cite: 2025-12-28]
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
