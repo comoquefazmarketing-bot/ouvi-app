@@ -5,43 +5,51 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const ParticlesBackground = () => {
+  const particleCount = 150; // Renderizamos 150 grupos que simulam a densidade de 15.000
+  
   const particles = useMemo(() => {
-    return Array.from({ length: 150 }).map((_, i) => {
-      // Cálculo para formar um círculo (anel da logo)
-      const angle = (i / 150) * Math.PI * 2;
-      const radius = 15 + Math.random() * 5; // O tamanho do anel central
+    return Array.from({ length: particleCount }).map((_, i) => {
+      const angle = (i / particleCount) * Math.PI * 2;
+      const radius = 18 + Math.random() * 6; 
       
       return {
         id: i,
-        size: Math.random() * 2 + 1,
+        size: Math.random() * 2 + 0.5,
         initialX: Math.random() * 100,
         initialY: Math.random() * 100,
-        // Coordenadas do anel central
         targetX: 50 + radius * Math.cos(angle),
-        targetY: 45 + radius * Math.sin(angle) * 1.2, // Ajuste leve para circularidade
-        duration: 4 + Math.random() * 6,
-        delay: Math.random() * 2,
+        targetY: 45 + radius * Math.sin(angle) * 1.3,
+        duration: 3 + Math.random() * 5,
+        delay: Math.random() * -20, // Negativo para já começarem em movimento
       };
     });
   }, []);
 
   return (
     <div style={styles.particleContainer}>
+      {/* Camada de Brilho de Fundo para simular densidade extrema */}
+      <div style={styles.nebulaOverlay} />
+      
       {particles.map((p) => (
         <motion.div
           key={p.id}
-          style={{ ...styles.particle, width: p.size, height: p.size }}
+          style={{ 
+            ...styles.particle, 
+            width: p.size, 
+            height: p.size,
+            // Sombra expandida para parecer que há milhares de partículas menores em volta
+            boxShadow: `0 0 ${p.size * 4}px #00f2fe` 
+          }}
           animate={{
-            // Ciclo: Espalhado -> Formando o Círculo da Logo -> Espalhado
             left: [`${p.initialX}%`, `${p.targetX}%`, `${p.initialX}%`],
             top: [`${p.initialY}%`, `${p.targetY}%`, `${p.initialY}%`],
-            opacity: [0.1, 0.9, 0.1],
-            scale: [1, 1.8, 1],
+            opacity: [0, 0.8, 0],
+            scale: [0.5, 1.2, 0.5],
           }}
           transition={{
             duration: p.duration,
             repeat: Infinity,
-            ease: "easeInOut",
+            ease: "linear",
             delay: p.delay,
           }}
         />
@@ -65,21 +73,23 @@ export default function LoginPage() {
 
   const playDuuummTuuumm = () => {
     if (typeof window === "undefined") return;
-    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const beat = (freq: number, vol: number, start: number, dur: number, isDum: boolean) => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, start);
-      if (isDum) osc.frequency.exponentialRampToValueAtTime(freq * 0.3, start + dur);
-      gain.gain.setValueAtTime(vol, start);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(start); osc.stop(start + dur);
-    };
-    beat(110, 0.3, audioCtx.currentTime, 0.8, false); 
-    beat(60, 0.6, audioCtx.currentTime + 0.7, 1.3, true); 
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const beat = (freq: number, vol: number, start: number, dur: number, isDum: boolean) => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, start);
+        if (isDum) osc.frequency.exponentialRampToValueAtTime(freq * 0.3, start + dur);
+        gain.gain.setValueAtTime(vol, start);
+        gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start(start); osc.stop(start + dur);
+      };
+      beat(110, 0.2, audioCtx.currentTime, 0.6, false); 
+      beat(55, 0.4, audioCtx.currentTime + 0.5, 1.0, true); 
+    } catch (e) { console.error("Audio blocked"); }
   };
 
   const handleAcesso = async (e: React.FormEvent) => {
@@ -87,12 +97,14 @@ export default function LoginPage() {
     setLoading(true);
     playDuuummTuuumm();
     
+    const cleanEmail = formData.email.trim().toLowerCase();
+    const cleanName = formData.nome.trim();
+
     try {
-      // RECONHECIMENTO DE SINAL: Verifica se o e-mail já existe [cite: 2025-12-30]
       const { data: existente } = await supabase
         .from('profiles')
-        .select('*')
-        .eq('email', formData.email)
+        .select('id, username, display_name')
+        .eq('email', cleanEmail)
         .maybeSingle();
 
       if (existente) {
@@ -102,29 +114,31 @@ export default function LoginPage() {
         return;
       }
 
-      // CRIAÇÃO NA MARRA: Se não existe, cria novo ID [cite: 2025-12-30]
       const manualId = crypto.randomUUID();
-      const { data: novo, error } = await supabase
+      const { data: novo, error: erroCriar } = await supabase
         .from('profiles')
         .insert({ 
           id: manualId,
-          email: formData.email, 
-          username: `${formData.nome.toLowerCase().replace(/\s/g, "")}_${Math.floor(Math.random() * 1000)}`, 
-          display_name: formData.nome,
+          email: cleanEmail, 
+          username: `${cleanName.replace(/\s/g, "").toLowerCase()}_${Math.floor(Math.random() * 1000)}`, 
+          display_name: cleanName,
           whatsapp: formData.whats 
         })
         .select().single();
 
-      if (error) throw error;
+      if (erroCriar) throw erroCriar;
       
       localStorage.setItem("ouvi_session_id", novo.id);
       localStorage.setItem("ouvi_user_name", novo.display_name);
       router.push("/dashboard");
+
     } catch (err: any) {
-      // ENTRADA FORÇADA: Se o banco travar, entra como convidado [cite: 2025-12-30]
-      localStorage.setItem("ouvi_user_name", formData.nome);
+      localStorage.setItem("ouvi_session_id", "temp_id");
+      localStorage.setItem("ouvi_user_name", cleanName);
       router.push("/dashboard");
-    } finally { setLoading(false); }
+    } finally {
+      setTimeout(() => setLoading(false), 2000);
+    }
   };
 
   return (
@@ -144,7 +158,7 @@ export default function LoginPage() {
             onChange={(e) => setFormData({...formData, nome: e.target.value})} />
           <input type="email" placeholder="E-MAIL" required style={styles.input} 
             onChange={(e) => setFormData({...formData, email: e.target.value})} />
-          <input type="tel" placeholder="WHATSAPP (17) 98803-1679" required value={formData.whats} style={styles.input} 
+          <input type="tel" placeholder="WHATSAPP" required value={formData.whats} style={styles.input} 
             onChange={(e) => handleWhatsChange(e.target.value)} />
           <button style={styles.mainBtn} disabled={loading}>
             {loading ? "SINTONIZANDO..." : "ENTRAR NO SINAL"}
@@ -164,14 +178,15 @@ export default function LoginPage() {
 const styles = {
   container: { background: "#000", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as "relative", color: "#fff", fontFamily: "sans-serif" },
   particleContainer: { position: "absolute" as "absolute", width: "100%", height: "100%", zIndex: 1 },
-  particle: { position: "absolute" as "absolute", background: "#00f2fe", borderRadius: "50%", boxShadow: "0 0 15px rgba(0, 242, 254, 0.7)" },
+  nebulaOverlay: { position: "absolute" as "absolute", width: "100%", height: "100%", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, rgba(0,0,0,0) 70%)", zIndex: 1 },
+  particle: { position: "absolute" as "absolute", background: "#00f2fe", borderRadius: "50%" },
   content: { width: "100%", maxWidth: "320px", display: "flex", flexDirection: "column" as "column", alignItems: "center", zIndex: 10 },
-  logo: { width: "160px", marginBottom: "15px" },
-  tagline: { fontSize: "8px", fontWeight: "900", letterSpacing: "6px", marginBottom: "50px", opacity: 0.5, textAlign: "center" as "center" },
-  form: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "14px" },
-  input: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "18px", borderRadius: "22px", color: "#fff", fontSize: "11px", letterSpacing: "2px", outline: "none", textAlign: "center" as "center" },
-  mainBtn: { background: "#fff", color: "#000", border: "none", padding: "20px", borderRadius: "22px", fontWeight: "900", fontSize: "11px", letterSpacing: "4px", cursor: "pointer", marginTop: "12px" },
-  credibilidade: { marginTop: "40px", display: "flex", alignItems: "center", gap: "15px", opacity: 0.3 },
-  icon: { width: "18px", height: "18px" },
-  breveText: { fontSize: "8px", fontWeight: "800", letterSpacing: "2px" }
+  logo: { width: "150px", marginBottom: "15px" },
+  tagline: { fontSize: "8px", fontWeight: "900", letterSpacing: "6px", marginBottom: "40px", opacity: 0.4, textAlign: "center" as "center" },
+  form: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px" },
+  input: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", padding: "18px", borderRadius: "20px", color: "#fff", fontSize: "11px", letterSpacing: "1px", textAlign: "center" as "center", outline: "none" },
+  mainBtn: { background: "#fff", color: "#000", border: "none", padding: "18px", borderRadius: "20px", fontWeight: "900", fontSize: "11px", letterSpacing: "3px", cursor: "pointer", marginTop: "10px" },
+  credibilidade: { marginTop: "40px", display: "flex", alignItems: "center", gap: "15px", opacity: 0.25 },
+  icon: { width: "16px", height: "16px" },
+  breveText: { fontSize: "8px", fontWeight: "800", letterSpacing: "1px" }
 };
