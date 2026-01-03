@@ -5,14 +5,19 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const ParticlesBackground = () => {
-  // 15.000 partículas simuladas para performance fluida [cite: 2026-01-02]
+  // 150 partículas mestras que representam as 15.000 em fluxo
   const particles = useMemo(() => {
     return Array.from({ length: 150 }).map((_, i) => ({
       id: i,
       size: Math.random() * 2 + 1,
-      x: Math.random() * 100,
-      y: Math.random() * 100,
-      duration: 10 + Math.random() * 20,
+      // Posição inicial aleatória
+      initialX: Math.random() * 100,
+      initialY: Math.random() * 100,
+      // Posição "Logo" (alinhadas ao centro para simular o formato)
+      logoX: 45 + Math.random() * 10, 
+      logoY: 45 + Math.random() * 10,
+      duration: 5 + Math.random() * 10,
+      delay: Math.random() * 2,
     }));
   }, []);
 
@@ -25,15 +30,20 @@ const ParticlesBackground = () => {
             ...styles.particle,
             width: p.size,
             height: p.size,
-            left: `${p.x}%`,
-            top: `${p.y}%`,
           }}
           animate={{
-            x: [0, Math.random() * 200 - 100, 0],
-            y: [0, Math.random() * 200 - 100, 0],
-            opacity: [0.2, 0.5, 0.2],
+            // Movimento: Aleatório -> Sincronizado na Logo -> Aleatório
+            left: [`${p.initialX}%`, `${p.logoX}%`, `${Math.random() * 100}%`],
+            top: [`${p.initialY}%`, `${p.logoY}%`, `${Math.random() * 100}%`],
+            opacity: [0.2, 0.8, 0.2],
+            scale: [1, 1.5, 1],
           }}
-          transition={{ duration: p.duration, repeat: Infinity, ease: "linear" }}
+          transition={{
+            duration: p.duration,
+            repeat: Infinity,
+            ease: "easeInOut",
+            delay: p.delay,
+          }}
         />
       ))}
     </div>
@@ -44,6 +54,15 @@ export default function LoginPage() {
   const [formData, setFormData] = useState({ nome: "", email: "", whats: "" });
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+
+  // Máscara dinâmica de WhatsApp com DDD
+  const handleWhatsChange = (value: string) => {
+    const raw = value.replace(/\D/g, "");
+    let formatted = raw;
+    if (raw.length > 2) formatted = `(${raw.slice(0, 2)}) ${raw.slice(2)}`;
+    if (raw.length > 7) formatted = `(${raw.slice(0, 2)}) ${raw.slice(2, 7)}-${raw.slice(7, 11)}`;
+    setFormData({ ...formData, whats: formatted });
+  };
 
   const playDuuummTuuumm = () => {
     if (typeof window === "undefined") return;
@@ -60,8 +79,9 @@ export default function LoginPage() {
       gain.connect(audioCtx.destination);
       osc.start(start); osc.stop(start + dur);
     };
-    beat(110, 0.3, audioCtx.currentTime, 0.7, false); // Tuuumm
-    beat(60, 0.6, audioCtx.currentTime + 0.6, 1.2, true); // Duuumm (mais lento) [cite: 2026-01-02]
+    // Cadência Duuumm Tuuumm lenta e profunda
+    beat(110, 0.3, audioCtx.currentTime, 0.8, false); 
+    beat(60, 0.6, audioCtx.currentTime + 0.7, 1.3, true); 
   };
 
   const handleAcesso = async (e: React.FormEvent) => {
@@ -69,15 +89,29 @@ export default function LoginPage() {
     setLoading(true);
     playDuuummTuuumm();
     try {
+      // UUID manual para sintonizar com Supabase sem depender do Google
+      const manualId = crypto.randomUUID();
+      const cleanUsername = `${formData.nome.toLowerCase().replace(/\s/g, "")}_${Math.floor(Math.random() * 1000)}`;
+
       const { data, error } = await supabase
         .from('profiles')
-        .upsert({ email: formData.email, username: formData.nome, whatsapp: formData.whats }, { onConflict: 'email' })
+        .upsert({ 
+          id: manualId,
+          email: formData.email, 
+          username: cleanUsername, 
+          display_name: formData.nome,
+          whatsapp: formData.whats 
+        }, { onConflict: 'email' })
         .select().single();
+      
       if (error) throw error;
+      
       localStorage.setItem("ouvi_session_id", data.id);
-      setTimeout(() => router.push("/dashboard"), 1000);
-    } catch (err) {
-      alert("Falha na sintonização. Verifique o SQL no Supabase.");
+      localStorage.setItem("ouvi_user_name", data.username);
+      
+      setTimeout(() => router.push("/dashboard"), 1200);
+    } catch (err: any) {
+      alert(`Falha na sintonização. Verifique o SQL no Supabase.`);
     } finally { setLoading(false); }
   };
 
@@ -85,37 +119,31 @@ export default function LoginPage() {
     <div style={styles.container}>
       <ParticlesBackground />
       <div style={styles.content}>
-        <motion.img src="/logo-ouvi.svg" style={styles.logo} animate={{ scale: [1, 1.05, 1] }} transition={{ duration: 8, repeat: Infinity }} />
+        <motion.img 
+          src="/logo-ouvi.svg" 
+          style={styles.logo} 
+          animate={{ 
+            scale: [1, 1.05, 1],
+            filter: ["drop-shadow(0 0 10px rgba(0,242,254,0.2))", "drop-shadow(0 0 25px rgba(0,242,254,0.5))", "drop-shadow(0 0 10px rgba(0,242,254,0.2))"] 
+          }} 
+          transition={{ duration: 6, repeat: Infinity }} 
+        />
         <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
         
         <form onSubmit={handleAcesso} style={styles.form}>
-          <input type="text" placeholder="NOME" required style={styles.input} onChange={(e) => setFormData({...formData, nome: e.target.value})} />
-          <input type="email" placeholder="E-MAIL" required style={styles.input} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-          <input type="tel" placeholder="WHATSAPP" required style={styles.input} onChange={(e) => setFormData({...formData, whats: e.target.value})} />
-          <button style={styles.mainBtn}>{loading ? "SINTONIZANDO..." : "ENTRAR NO SINAL"}</button>
+          <input type="text" placeholder="NOME" required style={styles.input} 
+            onChange={(e) => setFormData({...formData, nome: e.target.value})} />
+          
+          <input type="email" placeholder="E-MAIL" required style={styles.input} 
+            onChange={(e) => setFormData({...formData, email: e.target.value})} />
+          
+          <input type="tel" placeholder="WHATSAPP (00) 00000-0000" required value={formData.whats} style={styles.input} 
+            onChange={(e) => handleWhatsChange(e.target.value)} />
+          
+          <button style={styles.mainBtn} disabled={loading}>
+            {loading ? "SINTONIZANDO..." : "ENTRAR NO SINAL"}
+          </button>
         </form>
 
         <div style={styles.credibilidade}>
-          <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" style={styles.icon} />
-          <img src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" style={{...styles.icon, filter: 'invert(1)'}} />
-          <span style={styles.breveText}>ACESSO EM MANUTENÇÃO</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const styles = {
-  container: { background: "#000", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as "relative", color: "#fff", fontFamily: "sans-serif" },
-  particleContainer: { position: "absolute" as "absolute", width: "100%", height: "100%", zIndex: 1 },
-  particle: { position: "absolute" as "absolute", background: "#00f2fe", borderRadius: "50%", boxShadow: "0 0 8px rgba(0, 242, 254, 0.5)" },
-  content: { width: "100%", maxWidth: "320px", display: "flex", flexDirection: "column" as "column", alignItems: "center", zIndex: 10 },
-  logo: { width: "140px", marginBottom: "10px", filter: "drop-shadow(0 0 20px rgba(0,242,254,0.3))" },
-  tagline: { fontSize: "8px", fontWeight: "900", letterSpacing: "6px", marginBottom: "50px", opacity: 0.3, textAlign: "center" as "center" },
-  form: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px" },
-  input: { background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", padding: "18px", borderRadius: "20px", color: "#fff", fontSize: "10px", letterSpacing: "2px", outline: "none", textAlign: "center" as "center" },
-  mainBtn: { background: "#fff", color: "#000", border: "none", padding: "20px", borderRadius: "20px", fontWeight: "900", fontSize: "10px", letterSpacing: "4px", cursor: "pointer", marginTop: "10px" },
-  credibilidade: { marginTop: "40px", display: "flex", alignItems: "center", gap: "15px", opacity: 0.15 },
-  icon: { width: "14px", height: "14px" },
-  breveText: { fontSize: "7px", fontWeight: "800", letterSpacing: "2px" }
-};
+          <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.
