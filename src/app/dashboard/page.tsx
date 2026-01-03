@@ -13,46 +13,49 @@ export default function DashboardPage() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const router = useRouter();
 
-  // Função de sintonização com múltiplas tentativas [cite: 2025-12-30]
   const fetchData = useCallback(async (tentativa = 1) => {
     try {
       setLoading(true);
       
-      // Captura as fontes de identidade local
+      // 1. CAPTURA DO SINAL DE E-MAIL (ÂNCORA) [cite: 2025-12-30]
+      const savedEmail = localStorage.getItem("ouvi_user_email");
       const manualId = localStorage.getItem("ouvi_session_id");
-      const manualEmail = localStorage.getItem("ouvi_user_email");
 
-      // Lógica de Revalidação Estoica: se não achou, tenta até 5 vezes antes de desistir
-      if (!manualId && !manualEmail && tentativa <= 5) {
-        console.log(`Buscando sinal de identidade... Tentativa ${tentativa}/5`);
+      // Lógica de Revalidação: tenta 5 vezes sintonizar o e-mail antes de desistir
+      if (!savedEmail && tentativa <= 5) {
+        console.log(`Buscando e-mail no sinal... Tentativa ${tentativa}/5`);
         setTimeout(() => fetchData(tentativa + 1), 800);
         return;
       }
 
-      // Se após o loop não houver nada, aí sim redireciona [cite: 2025-12-30]
-      if (!manualId && !manualEmail) {
+      if (!savedEmail) {
         router.push("/login");
         return;
       }
 
-      // 1. VALIDAÇÃO PELA LISTA DE EMAILS
-      // Tenta recuperar o perfil completo do banco usando o e-mail ou ID salvo
-      const { data: perfil } = await supabase
+      // 2. CONFRONTO DE INFORMAÇÕES (PERFIL OFICIAL) [cite: 2025-12-30]
+      // Buscamos o perfil completo para garantir nome e avatar corretos
+      const { data: perfil, error: perfilError } = await supabase
         .from('profiles')
         .select('*')
-        .or(`email.eq.${manualEmail},id.eq.${manualId}`)
+        .eq('email', savedEmail)
         .maybeSingle();
 
       if (perfil) {
         setCurrentUser(perfil);
+        // Sincroniza o LocalStorage com a verdade do banco
+        localStorage.setItem("ouvi_session_id", perfil.id);
+        localStorage.setItem("ouvi_user_name", perfil.display_name || "");
+        localStorage.setItem("ouvi_user_avatar", perfil.avatar_url || "");
         setIsCheckingAuth(false);
-      } else if (manualId && manualId !== "temp_id") {
-        // Fallback: usa o ID manual se o banco estiver instável
-        setCurrentUser({ id: manualId, display_name: localStorage.getItem("ouvi_user_name") });
+      } else {
+        // Se o e-mail existe na lista mas não tem perfil, criamos um estado temporário
+        console.warn("Perfil não localizado para o e-mail:", savedEmail);
+        setCurrentUser({ email: savedEmail, display_name: "Usuário em Sintonização" });
         setIsCheckingAuth(false);
       }
 
-      // 2. BUSCA DE POSTS (RESOLVENDO AMBIGUIDADE) [cite: 2025-12-30]
+      // 3. BUSCA DE POSTS E HISTÓRICO [cite: 2025-12-30]
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select(`
@@ -70,7 +73,7 @@ export default function DashboardPage() {
       setPosts(postsData || []);
 
     } catch (err: any) {
-      console.error("Erro na sintonização:", err.message);
+      console.error("Erro na sintonização de histórico:", err.message);
     } finally {
       setLoading(false);
     }
@@ -80,7 +83,7 @@ export default function DashboardPage() {
     fetchData(); 
   }, [fetchData]);
 
-  // Mantém a tela preta enquanto sintoniza a identidade inicial
+  // Enquanto estiver checando a identidade, mantém o ambiente em silêncio (preto)
   if (isCheckingAuth && loading && posts.length === 0) {
     return (
       <div style={{ background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -109,7 +112,7 @@ export default function DashboardPage() {
                 />
               ))
             ) : (
-              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px', letterSpacing: '2px' }}>NENHUM SINAL ENCONTRADO.</p>
+              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px', letterSpacing: '2px' }}>NENHUM SINAL ENCONTRADO NO HISTÓRICO.</p>
             )}
           </div>
         )}
