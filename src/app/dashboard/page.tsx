@@ -17,7 +17,8 @@ export default function DashboardPage() {
       setLoading(true);
       
       // 1. Identificação de Identidade (Híbrida) [cite: 2025-12-30]
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
+      const user = authData?.user;
       const manualId = localStorage.getItem("ouvi_session_id");
       const manualName = localStorage.getItem("ouvi_user_name");
       
@@ -26,13 +27,22 @@ export default function DashboardPage() {
         return;
       }
 
-      // Injeta a identidade local no estado para o app não "piscar" [cite: 2025-12-30]
+      // Injeta a identidade local [cite: 2025-12-30]
       setCurrentUser(user || { id: manualId, display_name: manualName });
 
-      // 2. Busca de Posts
+      // 2. Busca de Posts - RESOLVENDO AMBIGUIDADE [cite: 2025-12-30]
+      // Usamos 'profiles:user_id' para forçar a relação correta e evitar o erro de 'multiple relationships'
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
-        .select('*, profiles(id, username, avatar_url)')
+        .select(`
+          *,
+          profiles:user_id (
+            id, 
+            username, 
+            display_name,
+            avatar_url
+          )
+        `)
         .order('created_at', { ascending: false });
 
       if (postsError) throw postsError;
@@ -45,10 +55,12 @@ export default function DashboardPage() {
     }
   }, [router]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { 
+    fetchData(); 
+  }, [fetchData]);
 
   return (
-    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', color: '#fff' }}>
+    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', color: '#fff', padding: '20px 0' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto' }}>
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px', gap: '20px' }}>
@@ -57,19 +69,23 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {posts.map((post) => (
-              <PostCard 
-                key={post.id} 
-                post={post} 
-                onOpenThread={() => setSelectedPost(post)} 
-                onRefresh={fetchData} 
-              />
-            ))}
+            {posts.length > 0 ? (
+              posts.map((post) => (
+                <PostCard 
+                  key={post.id} 
+                  post={post} 
+                  onOpenThread={() => setSelectedPost(post)} 
+                  onRefresh={fetchData} 
+                />
+              ))
+            ) : (
+              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px' }}>NENHUM SINAL ENCONTRADO NO FEED.</p>
+            )}
           </div>
         )}
       </div>
 
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
