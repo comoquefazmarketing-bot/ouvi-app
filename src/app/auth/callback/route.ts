@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server'
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const code = searchParams.get('code')
+  // Forçamos o domínio oficial para evitar redirecionamentos errados
   const origin = 'https://ouvi.ia.br'
 
   if (code) {
@@ -25,9 +26,13 @@ export async function GET(request: Request) {
       }
     )
 
+    // Troca o código pela sessão real
     const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)
 
     if (!error && session?.user) {
+      // PAUSA TÁTICA: Dá tempo ao navegador para salvar os cookies de sessão [cite: 2026-01-01]
+      await new Promise(resolve => setTimeout(resolve, 800));
+
       const { data: profile } = await supabase
         .from('profiles')
         .select('onboarding_completed')
@@ -35,14 +40,19 @@ export async function GET(request: Request) {
         .single()
 
       if (!profile) {
-        // Usa upsert para evitar erro de duplicidade se o perfil ja existir parcialmente
-        await supabase.from('profiles').upsert({ id: session.user.id })
+        // Cria o perfil se for o primeiro acesso [cite: 2025-12-29]
+        await supabase.from('profiles').upsert({ 
+          id: session.user.id,
+          updated_at: new Date().toISOString()
+        })
         return NextResponse.redirect(`${origin}/onboarding`)
       }
 
+      // Se já existe, vai direto para o dashboard [cite: 2025-12-30]
       return NextResponse.redirect(`${origin}/dashboard`)
     }
   }
 
+  // Se houver falha no código ou na sessão, volta para o login
   return NextResponse.redirect(`${origin}/login?error=auth_failed`)
 }

@@ -6,6 +6,11 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   })
 
+  // ISOLAMENTO: Não roda o middleware em rotas de autenticação para não expulsar o usuário [cite: 2025-12-29]
+  if (request.nextUrl.pathname.startsWith('/auth') || request.nextUrl.pathname.startsWith('/login')) {
+    return response
+  }
+
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -26,10 +31,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
+  // Atualiza a sessão silenciosamente para manter o acesso ativo [cite: 2025-12-29]
   await supabase.auth.getUser()
+  
   return response
 }
 
-export const config = {
+export const config {
+  // Protege tudo, exceto arquivos estáticos e imagens [cite: 2025-12-29]
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
