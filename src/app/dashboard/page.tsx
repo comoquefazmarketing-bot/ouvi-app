@@ -16,27 +16,28 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       
-      // 1. Identificação de Identidade (Híbrida) [cite: 2025-12-30]
-      const { data: authData } = await supabase.auth.getUser();
-      const user = authData?.user;
+      // 1. RECUPERAÇÃO DE SESSÃO [cite: 2025-12-30]
       const manualId = localStorage.getItem("ouvi_session_id");
       const manualName = localStorage.getItem("ouvi_user_name");
+      const manualAvatar = localStorage.getItem("ouvi_user_avatar");
       
-      if (!user && !manualId) {
+      if (!manualId || manualId === "temp_id") {
         router.push("/login");
         return;
       }
 
-      // Injeta a identidade local [cite: 2025-12-30]
-      setCurrentUser(user || { id: manualId, display_name: manualName });
+      setCurrentUser({ 
+        id: manualId, 
+        display_name: manualName, 
+        avatar_url: manualAvatar 
+      });
 
-      // 2. Busca de Posts - RESOLVENDO AMBIGUIDADE [cite: 2025-12-30]
-      // Usamos 'profiles:user_id' para forçar a relação correta e evitar o erro de 'multiple relationships'
+      // 2. BUSCA DE POSTS (RESOLVENDO AMBIGUIDADE) [cite: 2025-12-30]
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select(`
           *,
-          profiles:user_id (
+          author:user_id (
             id, 
             username, 
             display_name,
@@ -49,7 +50,7 @@ export default function DashboardPage() {
       setPosts(postsData || []);
 
     } catch (err: any) {
-      console.error("Erro na sintonização do dashboard:", err.message);
+      console.error("Erro na sintonização:", err.message);
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export default function DashboardPage() {
                 />
               ))
             ) : (
-              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px' }}>NENHUM SINAL ENCONTRADO NO FEED.</p>
+              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px' }}>NENHUM SINAL ENCONTRADO.</p>
             )}
           </div>
         )}

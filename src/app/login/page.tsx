@@ -1,5 +1,5 @@
 ﻿"use client";
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -58,6 +58,14 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
+  // VERIFICA SESSÃO ATIVA [cite: 2025-12-30]
+  useEffect(() => {
+    const sessionId = localStorage.getItem("ouvi_session_id");
+    if (sessionId && sessionId !== "temp_id") {
+      router.push("/dashboard");
+    }
+  }, [router]);
+
   const handleWhatsChange = (value: string) => {
     const raw = value.replace(/\D/g, "");
     let formatted = raw;
@@ -96,24 +104,20 @@ export default function LoginPage() {
     const cleanName = formData.nome.trim();
 
     try {
-      // 1. RECONHECIMENTO: Tenta encontrar o e-mail primeiro [cite: 2025-12-30]
-      const { data: existente, error: erroBusca } = await supabase
+      const { data: existente } = await supabase
         .from('profiles')
         .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
 
       if (existente) {
-        // Se encontrou, resgata a identidade e pula o cadastro
         localStorage.setItem("ouvi_session_id", existente.id);
         localStorage.setItem("ouvi_user_name", existente.display_name || existente.username);
         if (existente.avatar_url) localStorage.setItem("ouvi_user_avatar", existente.avatar_url);
-        
         router.push("/dashboard");
         return;
       }
 
-      // 2. ONBOARD: Cria novo sinal se não existir [cite: 2026-01-01]
       const manualId = crypto.randomUUID();
       const { data: novo, error: erroCriar } = await supabase
         .from('profiles')
@@ -133,7 +137,6 @@ export default function LoginPage() {
       router.push("/dashboard");
 
     } catch (err: any) {
-      console.warn("Entrando via sinal de emergência...");
       localStorage.setItem("ouvi_session_id", "temp_id");
       localStorage.setItem("ouvi_user_name", cleanName);
       router.push("/dashboard");
