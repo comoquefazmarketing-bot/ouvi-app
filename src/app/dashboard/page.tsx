@@ -19,13 +19,17 @@ export default function DashboardPage() {
       // 1. Identificação de Identidade (Híbrida) [cite: 2025-12-30]
       const { data: { user } } = await supabase.auth.getUser();
       const manualId = localStorage.getItem("ouvi_session_id");
+      const manualName = localStorage.getItem("ouvi_user_name");
       
       if (!user && !manualId) {
         router.push("/login");
         return;
       }
 
-      // 2. Busca de Posts sem travas de invites
+      // Injeta a identidade local no estado para o app não "piscar" [cite: 2025-12-30]
+      setCurrentUser(user || { id: manualId, display_name: manualName });
+
+      // 2. Busca de Posts
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select('*, profiles(id, username, avatar_url)')
@@ -44,12 +48,8 @@ export default function DashboardPage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   return (
-    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', padding: '20px', color: '#fff' }}>
+    <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', color: '#fff' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-        <header style={{ textAlign: 'center', marginBottom: '40px', paddingTop: '20px' }}>
-          <h1 style={{ fontSize: '24px', fontWeight: '900', letterSpacing: '8px', fontStyle: 'italic' }}>OUVI</h1>
-        </header>
-
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px', gap: '20px' }}>
             <div style={{ width: '30px', height: '30px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />

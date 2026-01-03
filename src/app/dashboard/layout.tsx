@@ -1,15 +1,31 @@
 ﻿"use client";
-import React, { useState } from "react";
-import { usePathname } from "next/navigation";
+import React, { useState, useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Header from "@/components/dashboard/Header/DashboardHeader";
 import TabBar from "@/components/dashboard/Navigation/TabBar";
 import SensoryBackground from "@/components/dashboard/Visuals/SensorySphere";
 import ActionDrawer from "@/components/dashboard/Navigation/ActionDrawer";
+import { supabase } from "@/lib/supabaseClient";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const pathname = usePathname();
+  const router = useRouter();
   const isThreadPage = pathname.includes("/post") || pathname.includes("/thread");
+
+  // Blindagem de Sessão Híbrida [cite: 2025-12-30]
+  useEffect(() => {
+    const manualId = localStorage.getItem("ouvi_session_id");
+    
+    // Escuta mudanças de auth, mas respeita o ID manual [cite: 2025-12-30]
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (!session && !manualId) {
+        router.push("/login");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router]);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", backgroundColor: "#000", overflow: "hidden", position: "relative" }}>
