@@ -10,34 +10,49 @@ export default function DashboardPage() {
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Trava contra expulsão
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const router = useRouter();
 
-  const fetchData = useCallback(async () => {
+  // Função de sintonização com múltiplas tentativas [cite: 2025-12-30]
+  const fetchData = useCallback(async (tentativa = 1) => {
     try {
       setLoading(true);
       
-      // 1. RECUPERAÇÃO DE SESSÃO COM BLINDAGEM [cite: 2025-12-30]
+      // Captura as fontes de identidade local
       const manualId = localStorage.getItem("ouvi_session_id");
-      const manualName = localStorage.getItem("ouvi_user_name");
-      const manualAvatar = localStorage.getItem("ouvi_user_avatar");
-      
-      // Se não encontrar o ID, aguarda um momento antes de expulsar
-      if (!manualId || manualId === "temp_id") {
-        console.warn("Sinal não identificado. Redirecionando...");
+      const manualEmail = localStorage.getItem("ouvi_user_email");
+
+      // Lógica de Revalidação Estoica: se não achou, tenta até 5 vezes antes de desistir
+      if (!manualId && !manualEmail && tentativa <= 5) {
+        console.log(`Buscando sinal de identidade... Tentativa ${tentativa}/5`);
+        setTimeout(() => fetchData(tentativa + 1), 800);
+        return;
+      }
+
+      // Se após o loop não houver nada, aí sim redireciona [cite: 2025-12-30]
+      if (!manualId && !manualEmail) {
         router.push("/login");
         return;
       }
 
-      setCurrentUser({ 
-        id: manualId, 
-        display_name: manualName, 
-        avatar_url: manualAvatar 
-      });
-      
-      setIsCheckingAuth(false); // Autoriza a exibição da página
+      // 1. VALIDAÇÃO PELA LISTA DE EMAILS
+      // Tenta recuperar o perfil completo do banco usando o e-mail ou ID salvo
+      const { data: perfil } = await supabase
+        .from('profiles')
+        .select('*')
+        .or(`email.eq.${manualEmail},id.eq.${manualId}`)
+        .maybeSingle();
 
-      // 2. BUSCA DE POSTS (AUTORIZADA) [cite: 2025-12-30]
+      if (perfil) {
+        setCurrentUser(perfil);
+        setIsCheckingAuth(false);
+      } else if (manualId && manualId !== "temp_id") {
+        // Fallback: usa o ID manual se o banco estiver instável
+        setCurrentUser({ id: manualId, display_name: localStorage.getItem("ouvi_user_name") });
+        setIsCheckingAuth(false);
+      }
+
+      // 2. BUSCA DE POSTS (RESOLVENDO AMBIGUIDADE) [cite: 2025-12-30]
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select(`
@@ -65,15 +80,19 @@ export default function DashboardPage() {
     fetchData(); 
   }, [fetchData]);
 
-  // Enquanto estiver checando, mantém o fundo preto para evitar "pulos" de tela
-  if (isCheckingAuth && loading) {
-    return <div style={{ background: '#000', height: '100vh' }} />;
+  // Mantém a tela preta enquanto sintoniza a identidade inicial
+  if (isCheckingAuth && loading && posts.length === 0) {
+    return (
+      <div style={{ background: '#000', height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: '20px', height: '20px', border: '2px solid #333', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      </div>
+    );
   }
 
   return (
     <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', color: '#fff', padding: '20px 0' }}>
       <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-        {loading ? (
+        {loading && posts.length === 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: '100px', gap: '20px' }}>
             <div style={{ width: '30px', height: '30px', border: '2px solid rgba(255,255,255,0.1)', borderTopColor: '#fff', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
             <p style={{ color: '#fff', textAlign: 'center', opacity: 0.3, fontSize: '10px', letterSpacing: '4px' }}>SINTONIZANDO...</p>
@@ -86,11 +105,11 @@ export default function DashboardPage() {
                   key={post.id} 
                   post={post} 
                   onOpenThread={() => setSelectedPost(post)} 
-                  onRefresh={fetchData} 
+                  onRefresh={() => fetchData(1)} 
                 />
               ))
             ) : (
-              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px' }}>NENHUM SINAL ENCONTRADO.</p>
+              <p style={{ textAlign: 'center', opacity: 0.5, marginTop: '50px', fontSize: '12px', letterSpacing: '2px' }}>NENHUM SINAL ENCONTRADO.</p>
             )}
           </div>
         )}
@@ -104,7 +123,7 @@ export default function DashboardPage() {
         <ThreadDrawer 
           post={selectedPost} 
           onClose={() => setSelectedPost(null)} 
-          onRefresh={fetchData} 
+          onRefresh={() => fetchData(1)} 
         />
       )}
     </div>
