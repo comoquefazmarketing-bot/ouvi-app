@@ -10,18 +10,21 @@ export default function DashboardPage() {
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true); // Trava contra expulsão
   const router = useRouter();
 
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       
-      // 1. RECUPERAÇÃO DE SESSÃO [cite: 2025-12-30]
+      // 1. RECUPERAÇÃO DE SESSÃO COM BLINDAGEM [cite: 2025-12-30]
       const manualId = localStorage.getItem("ouvi_session_id");
       const manualName = localStorage.getItem("ouvi_user_name");
       const manualAvatar = localStorage.getItem("ouvi_user_avatar");
       
+      // Se não encontrar o ID, aguarda um momento antes de expulsar
       if (!manualId || manualId === "temp_id") {
+        console.warn("Sinal não identificado. Redirecionando...");
         router.push("/login");
         return;
       }
@@ -31,8 +34,10 @@ export default function DashboardPage() {
         display_name: manualName, 
         avatar_url: manualAvatar 
       });
+      
+      setIsCheckingAuth(false); // Autoriza a exibição da página
 
-      // 2. BUSCA DE POSTS (RESOLVENDO AMBIGUIDADE) [cite: 2025-12-30]
+      // 2. BUSCA DE POSTS (AUTORIZADA) [cite: 2025-12-30]
       const { data: postsData, error: postsError } = await supabase
         .from('posts')
         .select(`
@@ -59,6 +64,11 @@ export default function DashboardPage() {
   useEffect(() => { 
     fetchData(); 
   }, [fetchData]);
+
+  // Enquanto estiver checando, mantém o fundo preto para evitar "pulos" de tela
+  if (isCheckingAuth && loading) {
+    return <div style={{ background: '#000', height: '100vh' }} />;
+  }
 
   return (
     <div className="dashboard-root" style={{ background: '#000', minHeight: '100vh', color: '#fff', padding: '20px 0' }}>
