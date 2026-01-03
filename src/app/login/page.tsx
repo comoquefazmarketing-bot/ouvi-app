@@ -5,13 +5,11 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const ParticlesBackground = () => {
-  const particleCount = 150; // Renderizamos 150 grupos que simulam a densidade de 15.000
-  
+  const particleCount = 150; 
   const particles = useMemo(() => {
     return Array.from({ length: particleCount }).map((_, i) => {
       const angle = (i / particleCount) * Math.PI * 2;
       const radius = 18 + Math.random() * 6; 
-      
       return {
         id: i,
         size: Math.random() * 2 + 0.5,
@@ -20,16 +18,14 @@ const ParticlesBackground = () => {
         targetX: 50 + radius * Math.cos(angle),
         targetY: 45 + radius * Math.sin(angle) * 1.3,
         duration: 3 + Math.random() * 5,
-        delay: Math.random() * -20, // Negativo para já começarem em movimento
+        delay: Math.random() * -20,
       };
     });
   }, []);
 
   return (
     <div style={styles.particleContainer}>
-      {/* Camada de Brilho de Fundo para simular densidade extrema */}
       <div style={styles.nebulaOverlay} />
-      
       {particles.map((p) => (
         <motion.div
           key={p.id}
@@ -37,7 +33,6 @@ const ParticlesBackground = () => {
             ...styles.particle, 
             width: p.size, 
             height: p.size,
-            // Sombra expandida para parecer que há milhares de partículas menores em volta
             boxShadow: `0 0 ${p.size * 4}px #00f2fe` 
           }}
           animate={{
@@ -101,19 +96,24 @@ export default function LoginPage() {
     const cleanName = formData.nome.trim();
 
     try {
-      const { data: existente } = await supabase
+      // 1. RECONHECIMENTO: Tenta encontrar o e-mail primeiro [cite: 2025-12-30]
+      const { data: existente, error: erroBusca } = await supabase
         .from('profiles')
-        .select('id, username, display_name')
+        .select('*')
         .eq('email', cleanEmail)
         .maybeSingle();
 
       if (existente) {
+        // Se encontrou, resgata a identidade e pula o cadastro
         localStorage.setItem("ouvi_session_id", existente.id);
         localStorage.setItem("ouvi_user_name", existente.display_name || existente.username);
+        if (existente.avatar_url) localStorage.setItem("ouvi_user_avatar", existente.avatar_url);
+        
         router.push("/dashboard");
         return;
       }
 
+      // 2. ONBOARD: Cria novo sinal se não existir [cite: 2026-01-01]
       const manualId = crypto.randomUUID();
       const { data: novo, error: erroCriar } = await supabase
         .from('profiles')
@@ -133,6 +133,7 @@ export default function LoginPage() {
       router.push("/dashboard");
 
     } catch (err: any) {
+      console.warn("Entrando via sinal de emergência...");
       localStorage.setItem("ouvi_session_id", "temp_id");
       localStorage.setItem("ouvi_user_name", cleanName);
       router.push("/dashboard");
