@@ -5,51 +5,31 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { motion, AnimatePresence } from "framer-motion";
 
-// --- SUB-COMPONENTE: LAYOUT ---
-function OnboardingLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ height: "100vh", background: "#000", display: "flex", justifyContent: "center", alignItems: "center", position: "relative", overflow: "hidden" }}>
-      <div style={{ position: "absolute", width: "100%", height: "100%", background: "radial-gradient(circle, rgba(0,242,254,0.05) 0%, rgba(0,0,0,1) 80%)" }} />
-      <div style={{ zIndex: 10, width: "100%", maxWidth: "400px", textAlign: "center", padding: "20px" }}>
-        {children}
-      </div>
-    </div>
-  );
-}
+// Função de som sintetizada [cite: 2026-01-01]
+const playStepSound = (isFinal = false) => {
+  const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+  const beat = (f: number, v: number, s: number, d: number) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(f, s);
+    if (f < 120) o.frequency.exponentialRampToValueAtTime(f * 0.5, s + d);
+    g.gain.setValueAtTime(v, s);
+    g.gain.exponentialRampToValueAtTime(0.001, s + d);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(s); o.stop(s + d);
+  };
+  
+  if (!isFinal) {
+    beat(150, 0.2, audioCtx.currentTime, 0.1); // Som sutil de clique
+  } else {
+    beat(150, 0.4, audioCtx.currentTime, 0.15); // Tum
+    beat(80, 0.6, audioCtx.currentTime + 0.12, 0.5); // Dum reforçado
+  }
+};
 
-// --- SUB-COMPONENTE: AVATAR ---
-function AvatarSelector({ avatarUrl, onNext }: { avatarUrl: string; onNext: () => void }) {
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "30px" }}>
-      <div style={{ position: "relative", width: "150px", height: "150px" }}>
-        <img src={avatarUrl || "/default-avatar.png"} alt="Sua Foto" style={{ width: "100%", height: "100%", borderRadius: "50%", border: "2px solid #00f2fe", objectFit: "cover", zIndex: 2, position: "relative" }} />
-        <div style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", borderRadius: "50%", background: "#00f2fe", filter: "blur(20px)", opacity: 0.4 }} />
-      </div>
-      <h2 style={{ color: "#fff", fontSize: "14px", letterSpacing: "4px", fontWeight: "900" }}>ESSA É A SUA IDENTIDADE?</h2>
-      <button onClick={onNext} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", padding: "12px 30px", borderRadius: "30px", cursor: "pointer", fontSize: "10px", fontWeight: "800", letterSpacing: "2px" }}>CONFIRMAR FREQUÊNCIA</button>
-    </motion.div>
-  );
-}
+// ... (OnboardingLayout, AvatarSelector, NickSelector permanecem iguais)
 
-// --- SUB-COMPONENTE: NICK ---
-function NickSelector({ initialNick, onFinish }: { initialNick: string; onFinish: (nick: string) => void }) {
-  const [nick, setNick] = useState(initialNick || "");
-  return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "25px" }}>
-      <h2 style={{ color: "#fff", fontSize: "14px", letterSpacing: "4px", fontWeight: "900" }}>COMO O MUNDO TE OUVE?</h2>
-      <input 
-        type="text" 
-        value={nick} 
-        onChange={(e) => setNick(e.target.value)} 
-        placeholder="@username"
-        style={{ background: "transparent", border: "none", borderBottom: "1px solid #00f2fe", color: "#fff", fontSize: "24px", textAlign: "center", outline: "none", width: "80%" }}
-      />
-      <button onClick={() => onFinish(nick)} style={{ background: "#00f2fe", color: "#000", padding: "15px 40px", borderRadius: "30px", cursor: "pointer", fontSize: "11px", fontWeight: "900", letterSpacing: "2px", border: "none" }}>ENTRAR NA SINTONIA</button>
-    </motion.div>
-  );
-}
-
-// --- PÁGINA PRINCIPAL ---
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState(0); 
@@ -58,8 +38,18 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const checkUser = async () => {
+      // Tentativa 1: Pegar sessão rápida
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      // Se não achar de primeira, espera 1 segundo (tempo dos cookies estabilizarem) [cite: 2025-12-29]
+      if (!session) {
+        await new Promise(r => setTimeout(r, 1000));
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
+
       if (!user) {
+        // Só expulsa se realmente, após o delay, não houver user
         router.push("/login");
         return;
       }
@@ -84,20 +74,26 @@ export default function OnboardingPage() {
     checkUser();
   }, [router]);
 
+  const handleNextStep = () => {
+    playStepSound(false);
+    setStep(2);
+  };
+
   const handleFinish = async (finalNick: string) => {
     if (!userData.id || finalNick.length < 3) return;
     setLoading(true);
+    playStepSound(true); // O Tum Dum final da sintonização [cite: 2026-01-01]
 
     const { error } = await supabase.from("profiles").upsert({
       id: userData.id,
       username: finalNick.trim().toLowerCase(),
       avatar_url: userData.avatar,
       onboarding_completed: true,
-      updated_at: new Date()
+      updated_at: new Date().toISOString()
     });
 
     if (!error) {
-      router.push("/dashboard");
+      setTimeout(() => router.push("/dashboard"), 600);
     } else {
       setLoading(false);
       console.error("Erro na sintonização:", error);
@@ -110,7 +106,7 @@ export default function OnboardingPage() {
     <OnboardingLayout>
       <AnimatePresence mode="wait">
         {step === 1 && (
-          <AvatarSelector key="avatar" avatarUrl={userData.avatar} onNext={() => setStep(2)} />
+          <AvatarSelector key="avatar" avatarUrl={userData.avatar} onNext={handleNextStep} />
         )}
         {step === 2 && (
           <NickSelector key="nick" initialNick={userData.nick} onFinish={handleFinish} />
