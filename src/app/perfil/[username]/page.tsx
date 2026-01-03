@@ -5,10 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Home, User, Mic, Search } from 'lucide-react';
 import { supabase } from '@/lib/supabaseClient';
 
-// Ajustado para o caminho exato validado pelo PowerShell
+// Utilitários e Componentes
 import { notifyArrival } from '@/app/dashboard/telegramService';
-
-// Importações dos componentes
 import PostCard from '@/components/dashboard/Post/PostCard';
 import ThreadDrawer from '@/components/dashboard/Threads/ThreadDrawer';
 import InstallStories from '@/components/dashboard/InstallStories';
@@ -18,50 +16,8 @@ export default function DashboardPage() {
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [myInvites, setMyInvites] = useState<any[]>([]);
   const [selectedPost, setSelectedPost] = useState<any>(null);
   const [showTutorial, setShowTutorial] = useState(false);
-
-  // Função para enviar o sinal (convite)
-  const handleEnviarConvite = async () => {
-    if (myInvites.length === 0) return;
-
-    // Pega o primeiro código disponível
-    const codigoParaUsar = myInvites[0].code;
-    
-    // Abre o prompt para o usuário digitar o e-mail
-    const emailAmigo = window.prompt(`SINTONIZAR NOVO MEMBRO\nVocê possui ${myInvites.length} chaves.\n\nDigite o e-mail para enviar o sinal:`);
-    
-    if (!emailAmigo || !emailAmigo.includes('@')) {
-      if (emailAmigo) alert("Frequência inválida. O e-mail precisa ser real.");
-      return;
-    }
-
-    try {
-      // Dispara a Edge Function de e-mail (Resend)
-      const { error } = await supabase.functions.invoke('resend', {
-        body: { 
-          to: emailAmigo,
-          subject: "🎙️ Seu sinal de acesso ao OUVI",
-          html: `<strong>${currentUser?.username || 'Um amigo'}</strong> te enviou uma chave de acesso exclusiva ao OUVI: <br><br><h1>${codigoParaUsar}</h1><br>Sintonize agora: https://ouvi-app.vercel.app`
-        }
-      });
-
-      if (error) throw error;
-
-      // Atualiza o status no banco de dados para evitar reuso
-      await supabase.from('invites').update({ status: 'enviado' }).eq('code', codigoParaUsar);
-      
-      alert("Sinal transmitido com sucesso.");
-      
-      // Remove o convite usado da lista local
-      setMyInvites(prev => prev.filter(inv => inv.code !== codigoParaUsar));
-      
-    } catch (err) {
-      console.error("Erro ao enviar convite:", err);
-      alert("Erro na sintonização do sinal.");
-    }
-  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -84,7 +40,7 @@ export default function DashboardPage() {
           await supabase.from('profiles').update({ welcome_sent: true }).eq('id', user.id);
         }
         
-        // Regra do PWA
+        // Regra do PWA (Sensorial) [cite: 2026-01-01]
         const isPWA = window.matchMedia('(display-mode: standalone)').matches;
         const hasSeen = localStorage.getItem('ouvi_tutorial_seen');
         if (!isPWA && !hasSeen) {
@@ -92,15 +48,7 @@ export default function DashboardPage() {
         }
       }
 
-      // 2. Busca de Convites Ativos
-      const { data: invites } = await supabase
-        .from('invites')
-        .select('code')
-        .eq('owner_id', user.id)
-        .eq('status', 'disponivel');
-      if (invites) setMyInvites(invites);
-
-      // 3. Feed de Áudio
+      // 2. Feed de Áudio (Acesso Direto ao Banco Limpo)
       const { data: postsData } = await supabase.from('posts').select('*').order('created_at', { ascending: false });
       const { data: profiles } = await supabase.from('profiles').select('id, username, avatar_url');
       const { data: comments } = await supabase.from('audio_comments').select('*');
@@ -157,26 +105,6 @@ export default function DashboardPage() {
         >
           {/* LADO A: FEED */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 px-4 scrollbar-hide">
-            
-            {/* Botão de Convites Minimalista e Funcional */}
-            {myInvites.length > 0 && (
-              <div className="mt-8 mb-4 flex justify-center px-6">
-                <motion.button 
-                  onClick={handleEnviarConvite}
-                  animate={{ 
-                    boxShadow: ["0 0 0px rgba(0,255,255,0)", "0 0 20px rgba(0,255,255,0.1)", "0 0 0px rgba(0,255,255,0)"]
-                  }}
-                  transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-                  className="w-full max-w-xs bg-zinc-900/50 border border-cyan-500/20 text-cyan-400 py-4 rounded-2xl flex flex-col items-center gap-1 active:scale-95 transition-all"
-                >
-                  <span className="text-[9px] font-black tracking-[3px] opacity-60 uppercase">Sinais Disponíveis</span>
-                  <span className="text-white text-xs font-bold tracking-widest">
-                    VOCÊ TEM {myInvites.length} {myInvites.length === 1 ? 'CHAVE' : 'CHAVES'}
-                  </span>
-                </motion.button>
-              </div>
-            )}
-
             {loading ? (
               <div className="flex flex-col items-center mt-32 gap-4">
                  <div className="w-8 h-8 border-2 border-white/10 border-t-white rounded-full animate-spin" />
@@ -194,7 +122,7 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* LADO B: PERFIL */}
+          {/* LADO B: PERFIL (Focado em Posts do Membro) */}
           <div className="w-[100vw] h-full overflow-y-auto pb-40 bg-zinc-950 px-1">
             <div className="grid grid-cols-3 gap-0.5 mt-0.5">
               {posts.filter(p => p.user_id === currentUser?.id).map(post => (
@@ -206,11 +134,12 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        {/* Navigation Bar (Microfone Untouchable) */}
+        {/* Navigation Bar (Microfone Untouchable) [cite: 2025-12-30] */}
         <nav className="fixed bottom-0 w-full bg-black/95 border-t border-zinc-900 pb-10 pt-4 px-10 flex justify-between items-center z-[100] backdrop-blur-2xl">
           <button onClick={() => setTab(0)} className={tab === 0 ? 'text-white' : 'text-zinc-800'}>
             <Home size={24} fill={tab === 0 ? "white" : "none"} />
           </button>
+          
           <button className="text-zinc-800"><Search size={24} /></button>
           
           <button className="bg-white text-black p-4 rounded-full -mt-16 shadow-[0_0_30px_rgba(255,255,255,0.15)] active:scale-90 transition-all border-4 border-black">
@@ -218,6 +147,7 @@ export default function DashboardPage() {
           </button>
 
           <button className="text-zinc-800"><Search size={24} /></button>
+          
           <button onClick={() => setTab(1)} className={tab === 1 ? 'text-white' : 'text-zinc-800'}>
             <User size={24} fill={tab === 1 ? "white" : "none"} />
           </button>
