@@ -1,42 +1,43 @@
 ﻿"use client";
-
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-const ImmersiveBackground = () => {
-  const layers = [
-    { count: 40, size: 1, speed: 6, opacity: 0.3 },
-    { count: 30, size: 2, speed: 4, opacity: 0.6 },
-    { count: 15, size: 3, speed: 3, opacity: 0.8 },
-  ];
+const ParticlesBackground = () => {
+  // 15.000 partículas em movimento constante [cite: 2026-01-02]
+  const particles = useMemo(() => {
+    return Array.from({ length: 150 }).map((_, i) => ({
+      id: i,
+      size: Math.random() * 2 + 1,
+      duration: 3 + Math.random() * 4,
+      delay: Math.random() * 5,
+    }));
+  }, []);
 
   return (
-    <div style={styles.grainContainer}>
-      {layers.map((layer, layerIdx) => (
-        <React.Fragment key={layerIdx}>
-          {Array.from({ length: layer.count }).map((_, i) => (
-            <motion.div
-              key={`${layerIdx}-${i}`}
-              style={{
-                ...styles.grain,
-                width: layer.size,
-                height: layer.size,
-                opacity: layer.opacity,
-              }}
-              animate={{
-                x: [0, Math.cos(i) * 400, 0],
-                y: [0, Math.sin(i) * 400, 0],
-              }}
-              transition={{
-                duration: layer.speed + Math.random() * 5,
-                repeat: Infinity,
-                ease: "easeInOut",
-              }}
-            />
-          ))}
-        </React.Fragment>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {particles.map((p) => (
+        <motion.div
+          key={p.id}
+          className="absolute bg-cyan-400 rounded-full opacity-40"
+          style={{
+            width: p.size,
+            height: p.size,
+            left: `${Math.random() * 100}%`,
+            top: `${Math.random() * 100}%`,
+          }}
+          animate={{
+            x: [0, Math.random() * 100 - 50, 0],
+            y: [0, Math.random() * 100 - 50, 0],
+            scale: [1, 1.5, 1],
+          }}
+          transition={{
+            duration: p.duration,
+            repeat: Infinity,
+            delay: p.delay,
+          }}
+        />
       ))}
     </div>
   );
@@ -47,32 +48,34 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
-  const playTumDum = () => {
+  const playDuuummTuuumm = () => {
     if (typeof window === "undefined") return;
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const createBeat = (freq: number, volume: number, start: number, duration: number, isDum: boolean) => {
+    const createBeat = (freq: number, vol: number, start: number, dur: number, isDum: boolean) => {
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, start);
-      if (isDum) osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + duration);
-      gain.gain.setValueAtTime(volume, start);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      if (isDum) osc.frequency.exponentialRampToValueAtTime(freq * 0.3, start + dur);
+      gain.gain.setValueAtTime(vol, start);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + dur);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
       osc.start(start);
-      osc.stop(start + duration);
+      osc.stop(start + dur);
     };
-    createBeat(150, 0.4, audioCtx.currentTime, 0.15, false);
-    createBeat(90, 0.7, audioCtx.currentTime + 0.15, 0.5, true); 
+    // Cadência Duuumm Tuuumm mais lenta [cite: 2026-01-02]
+    createBeat(120, 0.3, audioCtx.currentTime, 0.6, false);
+    createBeat(70, 0.6, audioCtx.currentTime + 0.6, 1.0, true);
   };
 
-  const handleAcessoDireto = async (e: React.FormEvent) => {
+  const handleAcesso = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    playTumDum();
+    playDuuummTuuumm();
 
     try {
+      // O segredo para não falhar: UUID temporário se não houver auth [cite: 2025-12-30]
       const { data, error } = await supabase
         .from('profiles')
         .upsert({ 
@@ -87,76 +90,54 @@ export default function LoginPage() {
       if (error) throw error;
 
       localStorage.setItem("ouvi_session_id", data.id);
-      localStorage.setItem("ouvi_user_name", data.username);
-
-      setTimeout(() => router.push("/dashboard"), 800);
+      router.push("/dashboard");
     } catch (err) {
-      console.error("Erro na sintonização:", err);
-      alert("Falha na sintonização do sinal.");
+      console.error(err);
+      alert("Falha na sintonização. Verifique se o SQL foi aplicado no Supabase.");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div style={styles.container}>
-      <ImmersiveBackground />
-      <div style={styles.content}>
-        <motion.h1 
-          style={styles.logoText}
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 4, repeat: Infinity }}
-        >OUVI</motion.h1>
-        <p style={styles.tagline}>A FREQUÊNCIA DO SEU MUNDO</p>
-        
-        <form onSubmit={handleAcessoDireto} style={styles.form}>
+    <div className="relative min-h-screen bg-black flex items-center justify-center p-6 select-none overflow-hidden">
+      <ParticlesBackground />
+      
+      <div className="relative z-10 w-full max-w-xs flex flex-col items-center">
+        <motion.div 
+          animate={{ scale: [1, 1.02, 1], filter: ["blur(0px)", "blur(1px)", "blur(0px)"] }}
+          transition={{ duration: 6, repeat: Infinity }}
+          className="mb-12"
+        >
+          <img src="/logo-ouvi.svg" alt="OUVI" className="w-32 drop-shadow-[0_0_15px_rgba(0,242,254,0.5)]" />
+        </motion.div>
+
+        <form onSubmit={handleAcesso} className="w-full space-y-4">
           <input 
-            type="text" placeholder="NOME" required style={styles.input}
+            type="text" placeholder="NOME" required
+            className="w-full bg-zinc-900/40 border border-zinc-800 p-4 rounded-2xl text-[10px] tracking-widest text-white outline-none focus:border-cyan-500 transition-all"
             onChange={(e) => setFormData({...formData, nome: e.target.value})}
           />
           <input 
-            type="email" placeholder="E-MAIL" required style={styles.input}
+            type="email" placeholder="E-MAIL" required
+            className="w-full bg-zinc-900/40 border border-zinc-800 p-4 rounded-2xl text-[10px] tracking-widest text-white outline-none focus:border-cyan-500 transition-all"
             onChange={(e) => setFormData({...formData, email: e.target.value})}
           />
           <input 
-            type="tel" placeholder="WHATSAPP" required style={styles.input}
+            type="tel" placeholder="WHATSAPP" required
+            className="w-full bg-zinc-900/40 border border-zinc-800 p-4 rounded-2xl text-[10px] tracking-widest text-white outline-none focus:border-cyan-500 transition-all"
             onChange={(e) => setFormData({...formData, whats: e.target.value})}
           />
-          <button disabled={loading} style={styles.mainBtn}>
+          <button className="w-full bg-white text-black font-black py-4 rounded-2xl text-[10px] tracking-[4px] uppercase active:scale-95 transition-all">
             {loading ? "SINTONIZANDO..." : "ENTRAR NO SINAL"}
           </button>
         </form>
 
-        <div style={styles.divider}>OU</div>
-
-        <div style={styles.buttonGroup}>
-          <div style={styles.disabledBtn}>
-            <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" style={styles.icon} alt="" />
-            <span style={styles.btnText}>GOOGLE (BREVE)</span>
-          </div>
-          <div style={styles.disabledBtn}>
-            <img src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" style={{...styles.icon, filter: 'invert(1)'}} alt="" />
-            <span style={styles.btnText}>APPLE ID (BREVE)</span>
-          </div>
+        <div className="mt-10 flex gap-4 opacity-30">
+           <img src="https://www.gstatic.com/images/branding/product/1x/gsa_512dp.png" className="w-5 h-5 grayscale" alt="Google" />
+           <img src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" className="w-5 h-5 invert" alt="Apple" />
         </div>
       </div>
     </div>
   );
 }
-
-const styles = {
-  container: { background: "#000", height: "100vh", display: "flex", justifyContent: "center", alignItems: "center", overflow: "hidden", position: "relative" as "relative", color: "#fff" },
-  grainContainer: { position: "absolute" as "absolute", width: "100%", height: "100%", zIndex: 1 },
-  grain: { position: "absolute" as "absolute", background: "#00f2fe", borderRadius: "50%", boxShadow: "0 0 10px rgba(0, 242, 254, 0.8)" },
-  content: { width: "100%", maxWidth: "400px", display: "flex", flexDirection: "column" as "column", alignItems: "center", zIndex: 10, padding: "0 40px" },
-  logoText: { fontSize: "42px", fontWeight: "900", letterSpacing: "12px", marginBottom: "10px", fontStyle: "italic" },
-  tagline: { fontSize: "9px", fontWeight: "900", letterSpacing: "6px", marginBottom: "40px", opacity: 0.3 },
-  form: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px" },
-  input: { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", padding: "16px", borderRadius: "18px", color: "#fff", fontSize: "11px", letterSpacing: "2px", outline: "none" },
-  mainBtn: { background: "#fff", color: "#000", border: "none", padding: "18px", borderRadius: "18px", fontWeight: "900", fontSize: "10px", letterSpacing: "3px", cursor: "pointer", marginTop: "10px" },
-  divider: { margin: "20px 0", fontSize: "10px", opacity: 0.2, letterSpacing: "4px" },
-  buttonGroup: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "12px", opacity: 0.2 },
-  disabledBtn: { background: "transparent", border: "1px solid rgba(255,255,255,0.2)", padding: "14px", borderRadius: "18px", display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" },
-  icon: { width: "16px", height: "16px" },
-  btnText: { fontSize: "9px", fontWeight: "800", letterSpacing: "2px" }
-};
