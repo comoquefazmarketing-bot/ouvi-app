@@ -13,16 +13,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const init = async () => {
+      // Pega a sessão atual de forma limpa
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
       setLoading(false);
     };
     init();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Escuta mudanças (Login/Logout)
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      
       if (session?.user) {
-        localStorage.setItem("ouvi_session", "true"); // Âncora anti-expulsão [cite: 2025-12-30]
+        localStorage.setItem("ouvi_session", "true");
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem("ouvi_session");
       }
     });
 
@@ -31,9 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (loading) return;
+
+    // Se não tem user nem âncora local, e não está no login, redireciona
+    const hasAnchor = typeof window !== 'undefined' && localStorage.getItem("ouvi_session");
     
-    // Se não tem user e não está no login, vai pro login
-    if (!user && pathname !== "/login" && !localStorage.getItem("ouvi_session")) {
+    if (!user && pathname !== "/login" && !hasAnchor) {
       router.replace("/login");
     }
   }, [user, loading, pathname, router]);

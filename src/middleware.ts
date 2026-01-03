@@ -3,9 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
+    request: { headers: request.headers },
   })
 
   const supabase = createServerClient(
@@ -18,37 +16,32 @@ export async function middleware(request: NextRequest) {
         },
         set(name: string, value: string, options: CookieOptions) {
           request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          })
+          response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set({ name, value, ...options })
         },
         remove(name: string, options: CookieOptions) {
           request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({
-            request: { headers: request.headers },
-          })
+          response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
-  // 1. Atualiza a sessão nos cookies [cite: 2025-12-29]
+  // 1. Atualiza a sessão
   const { data: { session } } = await supabase.auth.getSession()
 
-  // 2. Proteção Inteligente
-  const isLoginPage = request.nextUrl.pathname === '/login'
-  const isRoot = request.nextUrl.pathname === '/'
+  const { pathname } = request.nextUrl
+  const isLoginPage = pathname === '/login'
+  const isRoot = pathname === '/'
 
-  // Se o sinal está vazio e ele tenta entrar na raiz ou dashboard, vai pro login
-  if (!session && (isRoot || request.nextUrl.pathname.startsWith('/dashboard'))) {
+  // 2. Lógica de Redirecionamento Blindada
+  if (!session && (isRoot || pathname.startsWith('/dashboard'))) {
     if (!isLoginPage) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }
 
-  // Se já está logado e tenta ir pro login, manda pro dashboard direto
   if (session && isLoginPage) {
     return NextResponse.redirect(new URL('/dashboard', request.url))
   }
@@ -57,6 +50,8 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Mantemos o matcher que você enviou, ele é excelente para performance
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // AJUSTE CRÍTICO: Liberamos manifest.json, ícones e arquivos da pasta public
+  matcher: [
+    '/((?!api|_next/static|_next/image|favicon.ico|manifest.json|icon-192.png|icon-512.png|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'
+  ],
 }
