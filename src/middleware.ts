@@ -1,23 +1,30 @@
 ﻿import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
+// 1. Ampliamos as rotas para evitar loops e bloqueios de convite [cite: 2025-12-29]
+const PUBLIC_ROUTES = [
+  '/',
+  '/login',
+  '/auth',
+  '/onboarding',
+  '/invite',
+  '/manifesto',
+  '/waitlist',
+  '/api',
+]
+
 export async function middleware(request: NextRequest) {
-  // Criamos a resposta base
+  const { pathname } = request.nextUrl
+
+  // 2. Bypass imediato: Se for público, nem processa cookies [cite: 2025-12-29]
+  if (PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+    return NextResponse.next()
+  }
+
+  // Criamos uma ÚNICA resposta para não perder estado [cite: 2025-12-29]
   let response = NextResponse.next({
     request: { headers: request.headers },
   })
-
-  // 1. ZONA LIVRE: Definimos rotas que o middleware NUNCA deve bloquear [cite: 2025-12-29]
-  // Adicionamos /onboarding aqui para que ele nunca te expulse dessa página
-  const bypassRoutes = ['/login', '/auth', '/onboarding', '/_next', '/favicon.ico']
-  
-  const isBypassRoute = bypassRoutes.some(route => 
-    request.nextUrl.pathname.startsWith(route)
-  )
-
-  if (isBypassRoute) {
-    return response
-  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,25 +32,22 @@ export async function middleware(request: NextRequest) {
     {
       cookies: {
         get(name: string) { return request.cookies.get(name)?.value },
+        // Corrigido: Apenas response.cookies.set() para manter a mutabilidade correta [cite: 2025-12-29]
         set(name: string, value: string, options: CookieOptions) {
-          request.cookies.set({ name, value, ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set({ name, value, ...options })
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options })
-          response = NextResponse.next({ request: { headers: request.headers } })
           response.cookies.set({ name, value: '', ...options })
         },
       },
     }
   )
 
-  // Verificamos o usuário apenas para rotas protegidas (como o dashboard) [cite: 2025-12-29]
+  // 3. Verificação minimalista: Só barra se não houver sessão [cite: 2025-12-29]
   const { data: { user } } = await supabase.auth.getUser()
 
-  // 2. PROTEÇÃO DO DASHBOARD: Só redireciona se tentar entrar no dashboard sem estar logado
-  if (!user && request.nextUrl.pathname.startsWith('/dashboard')) {
+  if (!user) {
+    // Redireciona para o login apenas rotas privadas (como /dashboard) [cite: 2025-12-30]
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
@@ -51,6 +55,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Mantemos o matcher para interceptar as rotas do app [cite: 2025-12-28]
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
