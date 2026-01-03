@@ -6,8 +6,9 @@ export async function middleware(request: NextRequest) {
     request: { headers: request.headers },
   })
 
-  // ISOLAMENTO: Não roda o middleware em rotas de autenticação para não expulsar o usuário [cite: 2025-12-29]
-  if (request.nextUrl.pathname.startsWith('/auth') || request.nextUrl.pathname.startsWith('/login')) {
+  // ISOLAMENTO: Não interceptar estas rotas para evitar loops de redirecionamento [cite: 2025-12-29]
+  const publicRoutes = ['/login', '/auth', '/onboarding']
+  if (publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
     return response
   }
 
@@ -31,13 +32,17 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Atualiza a sessão silenciosamente para manter o acesso ativo [cite: 2025-12-29]
-  await supabase.auth.getUser()
-  
+  const { data: { user } } = await supabase.auth.getUser()
+
+  // Se não houver usuário e não for rota liberada, volta para o login
+  if (!user && !publicRoutes.some(route => request.nextUrl.pathname.startsWith(route))) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
   return response
 }
 
-export const config {
-  // Protege tudo, exceto arquivos estáticos e imagens [cite: 2025-12-29]
+// CORREÇÃO AQUI: Adicionado o "=" que faltava [cite: 2025-12-28]
+export const config = {
   matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
