@@ -1,5 +1,7 @@
 ﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
+// Importamos o cérebro que gerencia a entrada e permanência do usuário
+import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
   title: "OUVI",
@@ -11,7 +13,6 @@ export const metadata: Metadata = {
     title: "OUVI",
   },
   icons: {
-    // Garante que o favicon e a logo mobile sejam encontrados
     icon: "/icon-192.png",
     apple: "/icon-192.png",
     shortcut: "/icon-192.png",
@@ -34,7 +35,12 @@ export default function RootLayout({
   return (
     <html lang="pt-br" className="bg-black">
       <body className="bg-black text-white antialiased">
-        {children}
+        {/* O AuthProvider envolve todo o app. 
+            Ele garante que o usuário seja reconhecido antes de qualquer decisão de expulsão.
+        */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
