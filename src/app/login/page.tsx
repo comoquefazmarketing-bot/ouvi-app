@@ -43,8 +43,9 @@ const ImmersiveBackground = () => {
 
 export default function LoginPage() {
   
-  // Função que reconstrói o som com o "Dum" mais presente
+  // Som sintetizado: "Tum Dum" (A pulsação do OUVI)
   const playTumDum = () => {
+    if (typeof window === "undefined") return;
     const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     const createBeat = (freq: number, volume: number, start: number, duration: number, isDum: boolean) => {
@@ -54,13 +55,11 @@ export default function LoginPage() {
       osc.type = 'sine';
       osc.frequency.setValueAtTime(freq, start);
       
-      // O segredo do Dum: rampa de frequência para dar peso
       if (isDum) {
         osc.frequency.exponentialRampToValueAtTime(freq * 0.4, start + duration);
       }
 
       gain.gain.setValueAtTime(volume, start);
-      // Sustentação maior para o Dum não sumir
       gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
       
       osc.connect(gain);
@@ -70,33 +69,35 @@ export default function LoginPage() {
       osc.stop(start + duration);
     };
 
-    // "Tum" - Rápido e seco
     createBeat(150, 0.4, audioCtx.currentTime, 0.15, false);
-    
-    // "Dum" - Frequência mais baixa, maior volume e maior duração
-    // Começa 150ms depois para simular o coração
     createBeat(90, 0.7, audioCtx.currentTime + 0.15, 0.5, true); 
   };
 
   const handleLogin = async (provider: 'google' | 'tiktok' | 'instagram') => {
-    // Toca o som sintetizado reforçado
     playTumDum();
 
-    // Pequeno delay para o usuário sentir o som antes do redirecionamento
+    // Pequeno delay para a percepção sensorial do som
     setTimeout(async () => {
       try {
+        // Captura a origem exata (evita erro de mismatch entre ouvi.ia.br e www.ouvi.ia.br)
+        const origin = window.location.origin;
+        
         const { error } = await supabase.auth.signInWithOAuth({
           provider: provider as any,
           options: {
-            // Garante que o redirecionamento aponte para o callback que blindamos
-            redirectTo: `https://ouvi.ia.br/auth/callback`,
+            // Sintonização dinâmica do redirect
+            redirectTo: `${origin}/auth/callback`,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'consent',
+            },
           },
         });
         if (error) throw error;
       } catch (error) {
-        console.error("Erro ao logar:", error);
+        console.error("Erro na sintonização de login:", error);
       }
-    }, 200);
+    }, 250);
   };
 
   return (
@@ -115,7 +116,7 @@ export default function LoginPage() {
           <motion.button
             onClick={() => handleLogin('google')}
             style={styles.premiumBtn}
-            whileHover={{ scale: 1.02 }}
+            whileHover={{ scale: 1.02, backgroundColor: "rgba(255, 255, 255, 0.05)" }}
             whileTap={{ scale: 0.98 }}
           >
             <span style={styles.btnText}>GOOGLE ACCESS</span>
@@ -134,6 +135,6 @@ const styles = {
   logoMaster: { width: "160px", height: "auto", marginBottom: "15px" },
   tagline: { color: "#fff", fontSize: "10px", fontWeight: "900", letterSpacing: "10px", marginBottom: "60px", opacity: 0.3 },
   buttonGroup: { width: "100%", display: "flex", flexDirection: "column" as "column", gap: "16px", padding: "0 60px" },
-  premiumBtn: { background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "16px", borderRadius: "20px", cursor: "pointer", backdropFilter: "blur(20px)", display: "flex", justifyContent: "center", color: "#fff" },
+  premiumBtn: { background: "rgba(255, 255, 255, 0.02)", border: "1px solid rgba(255, 255, 255, 0.15)", padding: "16px", borderRadius: "20px", cursor: "pointer", backdropFilter: "blur(20px)", display: "flex", justifyContent: "center", color: "#fff", outline: "none" },
   btnText: { fontSize: "11px", fontWeight: "800", letterSpacing: "2px" }
 };
