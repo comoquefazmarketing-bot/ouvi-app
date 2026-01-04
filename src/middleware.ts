@@ -8,12 +8,8 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  // 1. LISTA DE EXCEÇÃO (Abertura Total para Arquivos)
-  // Se o caminho tiver um ponto (como .json, .svg, .png) ou for pasta do Next, libera direto
-  const isStaticFile = pathname.includes('.') || pathname.startsWith('/_next')
-  const isLoginPage = pathname === '/login'
-
-  if (isStaticFile || isLoginPage) {
+  // Se for qualquer arquivo com extensão ou a página de login, ignora o middleware
+  if (pathname.includes('.') || pathname === '/login' || pathname.startsWith('/_next')) {
     return response
   }
 
@@ -39,7 +35,7 @@ export async function middleware(request: NextRequest) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
-  // 2. PROTEÇÃO DE ROTA
+  // SÓ redireciona se tentar entrar no dashboard sem login
   if (!session && pathname.startsWith('/dashboard')) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
@@ -48,6 +44,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Matcher ultra-abrangente para não processar arquivos desnecessários
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.json|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 }
