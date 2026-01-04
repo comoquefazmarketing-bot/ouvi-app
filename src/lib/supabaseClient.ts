@@ -1,14 +1,23 @@
 ﻿import { createClient } from '@supabase/supabase-js';
 
-// No Next.js, as chaves de ambiente devem começar com NEXT_PUBLIC_
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// Função auxiliar para garantir que o código só rode se houver chaves
+const getSupabaseConfig = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error("🚨 Erro: Chaves do Supabase não encontradas! Verifique o .env ou o painel da Vercel.");
-}
+  if (!url || !key) {
+    // No servidor (Vercel Build), isso ajuda a identificar o erro no log
+    throw new Error("🚨 CRÍTICO: Chaves do Supabase ausentes no Ambiente de Execução!");
+  }
+  return { url, key };
+};
 
-export const supabase = createClient(
-  supabaseUrl || '', 
-  supabaseAnonKey || ''
-);
+const { url, key } = getSupabaseConfig();
+
+export const supabase = createClient(url, key, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true
+  }
+});
